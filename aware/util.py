@@ -13,9 +13,15 @@ def read_gdal_file(filename, fill_value=None, return_prj_settings=False):
             data = data.filled(fill_value)
 
         if return_prj_settings:
-            return data, prj_settings
+            meta = ds.meta
+            meta = {k: v for k, v in meta.items() if k != 'transform'} # avoid "GDAL-style transforms are deprecated and will not be supported in Rasterio 1.0" warning
+            return data, meta
         else:
             return data
+
+def write_gdal_file(filename, data, prj_settings):
+    with rasterio.open(filename, 'w', **prj_settings) as ds:
+        ds.write_band(1, data)
 
 def num2date(ncvar):
     time_vals = ncvar[:]
