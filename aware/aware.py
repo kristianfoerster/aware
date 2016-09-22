@@ -52,7 +52,7 @@ class Aware(object):
         self._config = c
 
     def initialize(self):
-        dtm = util.read_gdal_file(self.config.dtm_file)
+        dtm, prj_settings = util.read_gdal_file(self.config.dtm_file, return_prj_settings=True)
         glaciers = aware.util.read_gdal_file(self.config.glaciers_file)
         catchments = aware.util.read_gdal_file(self.config.catchments_file, fill_value=0)
 
@@ -156,7 +156,8 @@ class Aware(object):
                     params.ddf_ice,
                     glacier_fraction=ice_melt_factor
                 )
-
+                icewe[cpx] = cicewe
+                
                 glacier_outflow = ice_outflow.mean() + snow_outflow_glacierized.mean()
 
                 if self.config.enable_soil_model:

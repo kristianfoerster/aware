@@ -5,14 +5,17 @@ import numpy as np
 import pandas as pd
 import rasterio
 
-def read_gdal_file(filename, fill_value=None):
+def read_gdal_file(filename, fill_value=None, return_prj_settings=False):
     with rasterio.open(filename) as ds:
         data = ds.read(1, masked=(fill_value is not None))
 
         if fill_value is not None:
             data = data.filled(fill_value)
 
-        return data
+        if return_prj_settings:
+            return data, prj_settings
+        else:
+            return data
 
 def num2date(ncvar):
     time_vals = ncvar[:]
