@@ -82,7 +82,19 @@ class Aware(object):
             groundwater.K = params.gw_k
 
             center_lon_lat = util.center_lon_lat(self.config.dtm_file) # TODO calculate this for each catchment
-            evapotranspiration = aware.models.EvapotranspirationModel(center_lon_lat[1], J=params.et_j)
+            if center_lon_lat[0] < - 180 or center_lon_lat[0] > 180 or center_lon_lat[1] < -90 or center_lon_lat[1] > 90:
+                print('Error: gdal might not have correctly detected latitude and longitude!')
+                print('Try to use values from config file...')
+                if 'latitude' in params:
+                    latitude = params['latitude']
+                    print('Use value from config file: %f' % latitude)
+                else:
+                    latitude = 45
+                    print('Failed: No valid values found! Using DEFAULT latitude: %f' % latitude)
+                    print('Please check configuration since this parameter is crucial for ET computations!')
+            else:
+                latitude = center_lon_lat[1]
+            evapotranspiration = aware.models.EvapotranspirationModel(latitude, J=params.et_j)
             evapotranspiration.delta_daylength = 0
             soil.SMSC  = params.soil_capacity
             soil.DRf   = params.psi
