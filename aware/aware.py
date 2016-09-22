@@ -151,21 +151,19 @@ class Aware(object):
 
         rts_catchments = collections.OrderedDict()
 
+        rts = pd.DataFrame(index=dates, columns=self._results_time_series_columns, dtype=float)
         for cid in self.catchment_ids:
-            params = self.config.params.catchments[cid]
-            catchment = self.catchments[cid]
-            cpx = self.catchments[cid].pixels
+            rts_catchments[cid] = rts.copy()
 
-            rts = pd.DataFrame(index=dates, columns=self._results_time_series_columns, dtype=float)
+        for date in dates:
+            print(date)
 
-            # moved to init() function
-            #sms[cpx] += params.sms_init
-            #gw_storage = params.gw_storage_init
+            temp, precip = self.meteo.get_meteo(date)
 
-            for date in dates:
-                print(date)
-
-                temp, precip = self.meteo.get_meteo(date) # TODO get meteo only for catchment pixels
+            for cid in self.catchment_ids:
+                params = self.config.params.catchments[cid]
+                catchment = self.catchments[cid]
+                cpx = self.catchments[cid].pixels
 
                 cswe, snowmelt, snow_outflow, snowfall, rainfall, melt_avail = catchment.melt.melt(
                     self.state_swe.get_state(cpx), #swe[cpx],
@@ -228,7 +226,7 @@ class Aware(object):
                 
                 self.state_groundwater.set_state(gw_storage,cpx)                
                 
-                rts_cur = rts.loc[date]
+                rts_cur = rts_catchments[cid].loc[date]
                 rts_cur.temp = temp[cpx].mean()
                 rts_cur.precip = precip[cpx].mean()
                 rts_cur.snowfall = snowfall.mean()
@@ -248,7 +246,6 @@ class Aware(object):
                 rts_cur.direct_runoff = direct_runoff
                 # rts_cur.icewe = self.state_icewe.get_state(cpx).mean() # activate if required
 
-            rts_catchments[cid] = rts
 
         results = munch.Munch()
         results.ts = pd.Panel(rts_catchments)
