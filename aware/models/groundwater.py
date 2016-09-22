@@ -8,7 +8,11 @@ class GroundwaterModel(object):
     def groundwater_model(self, GWStorage, gw_inflow):
         GWStorage = GWStorage + gw_inflow
         baseflow = GWStorage / self.K
-        if baseflow > GWStorage:
-            baseflow = GWStorage
+        #if baseflow > GWStorage:
+        #    baseflow = GWStorage
+        # computations on arrays instead of single values
+        pos_exc = baseflow > GWStorage
+        baseflow[pos_exc] = GWStorage[pos_exc]
+        
         GWStorage = GWStorage - baseflow
         return baseflow, GWStorage

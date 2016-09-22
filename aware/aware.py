@@ -6,9 +6,8 @@ import munch
 import numpy as np
 import pandas as pd
 from . import util
+from . import awarestatevariable
 
-import matplotlib
-import matplotlib.pyplot as plt
 
 class Aware(object):
     _results_time_series_columns = '''
@@ -59,6 +58,13 @@ class Aware(object):
         self.input_grids = munch.Munch(dtm=dtm, glaciers=glaciers, catchments=catchments)
         self.catchment_ids = np.unique(catchments[catchments > 0])
 
+        # define statevariables (glacier reserved for future work)
+        self.state_swe          = awarestatevariable.AwareStateVariable('Snow water equivalent SWE', prj_settings, None, None, catchments>0)
+        self.state_icewe        = awarestatevariable.AwareStateVariable('Ice water equivalent',      prj_settings, None, None, catchments>0)
+        self.state_glacierarea  = awarestatevariable.AwareStateVariable('Glaciated area',            prj_settings, None, None, catchments>0)
+        self.state_soilmoisture = awarestatevariable.AwareStateVariable('Soil moisture storage',     prj_settings, None, None, catchments>0)
+        self.state_groundwater  = awarestatevariable.AwareStateVariable('Groundwater storage',       prj_settings, None, None, catchments>0)
+      
         default_params = self.config.params.default
         catchment_params = {cid: default_params.copy() for cid in self.catchment_ids}
         if 'catchments' in self.config.params:
@@ -69,7 +75,7 @@ class Aware(object):
         self.catchments = munch.Munch()
         for cid in self.catchment_ids:
             params = self.config.params.catchments[cid]
-
+            
             soil = aware.models.SoilModel()
 
             groundwater = aware.models.GroundwaterModel()
@@ -97,6 +103,13 @@ class Aware(object):
             self.catchments[cid].melt = melt
             self.catchments[cid].pixels = (self.input_grids.catchments == cid)
 
+            cpx = self.catchments[cid].pixels
+            self.state_soilmoisture.set_state(params.sms_init, cpx)
+            self.state_swe.set_state(0., cpx)
+            self.state_icewe.set_state(0., cpx)
+            self.state_glacierarea.set_state(glaciers)
+            self.state_groundwater.set_state(params.gw_storage_init, cpx)
+
         self.meteo = aware.Meteo(
             self.config,
             dtm,
@@ -111,12 +124,18 @@ class Aware(object):
 
         dates = pd.date_range(start=start_date, end=end_date, freq='M')
 
-        sms = np.zeros(self.input_grids.dtm.shape)
-        swe = np.zeros(self.input_grids.dtm.shape)
-        icewe = np.zeros(self.input_grids.dtm.shape)
-        glaciers = self.input_grids.glaciers
+        #sms = np.zeros(self.input_grids.dtm.shape)
+        #swe = np.zeros(self.input_grids.dtm.shape)
+        #icewe = np.zeros(self.input_grids.dtm.shape)
+        # glaciers = self.input_grids.glaciers
+        # move into time loop!!!!!!!!
+        glaciers = self.state_glacierarea.get_state() # couple glacier model here!
         glaciers_pos = glaciers > 0
-        icewe[glaciers_pos] = 1e10
+        
+        # this is a crude assumption which needs to be reconsidered as soon
+        # as the glacier model is coupled!
+        # icewe[glaciers_pos] = 1e10
+        self.state_icewe.set_state(1e10,glaciers_pos)
 
         rts_catchments = collections.OrderedDict()
 
@@ -127,8 +146,9 @@ class Aware(object):
 
             rts = pd.DataFrame(index=dates, columns=self._results_time_series_columns, dtype=float)
 
-            sms[cpx] += params.sms_init
-            gw_storage = params.gw_storage_init
+            # moved to init() function
+            #sms[cpx] += params.sms_init
+            #gw_storage = params.gw_storage_init
 
             for date in dates:
                 print(date)
@@ -136,13 +156,13 @@ class Aware(object):
                 temp, precip = self.meteo.get_meteo(date) # TODO get meteo only for catchment pixels
 
                 cswe, snowmelt, snow_outflow, snowfall, rainfall, melt_avail = catchment.melt.melt(
-                    swe[cpx],
+                    self.state_swe.get_state(cpx), #swe[cpx],
                     precip[cpx],
                     temp[cpx],
                     params.ddf_snow,
                     glacier_fraction=None
                 )
-                swe[cpx] = cswe
+                self.state_swe.set_state(cswe,cpx) #swe[cpx] = cswe
 
                 snow_outflow_unglacierized = snow_outflow * (1. - glaciers[cpx])
                 snow_outflow_glacierized = np.zeros(self.input_grids.dtm.shape)
@@ -150,15 +170,20 @@ class Aware(object):
 
                 ice_melt_factor = np.minimum(glaciers[cpx], glaciers[cpx] * melt_avail * params.ddf_ice / params.ddf_snow)
                 cicewe, icemelt, ice_outflow, _, _, _ = catchment.melt.melt(
-                    icewe[cpx],
+                    self.state_icewe.get_state(cpx), # icewe[cpx],
                     precip[cpx] * 0.0,
                     temp[cpx],
                     params.ddf_ice,
                     glacier_fraction=ice_melt_factor
                 )
-                icewe[cpx] = cicewe
+                #icewe[cpx] = cicewe
+                self.state_icewe.set_state(cicewe,cpx)
                 
-                glacier_outflow = ice_outflow.mean() + snow_outflow_glacierized.mean()
+                # glacier_outflow = ice_outflow.mean() + snow_outflow_glacierized.mean()
+                glacier_outflow = ice_outflow + snow_outflow_glacierized
+
+                # get groundwater state
+                gw_storage = self.state_groundwater.get_state(cpx)
 
                 if self.config.enable_soil_model:
                     et_pot = catchment.evapotranspiration.monthly_evapotranspiration(
@@ -171,41 +196,45 @@ class Aware(object):
                     csms, perc, runoff_d, et_act = catchment.soil.soil_water_balance(
                         snow_outflow_unglacierized,
                         et_pot,
-                        sms[cpx]
+                        self.state_soilmoisture.get_state(cpx) #sms[cpx]
                     )
-                    sms[cpx] = csms
+                    # sms[cpx] = csms
+                    self.state_soilmoisture.set_state(csms,cpx)
                     percolation = perc.mean()
                     direct_runoff = runoff_d.mean()
 
-                    baseflow, gw_storage = catchment.groundwater.groundwater_model(gw_storage, percolation)
+                    baseflow, gw_storage = catchment.groundwater.groundwater_model(gw_storage, perc) #percolation)
                     runoff = (baseflow + direct_runoff) + glacier_outflow
                 else:
-                    melt_only = snow_outflow_glacierized.mean() + glacier_outflow
+                    melt_only = snow_outflow_glacierized + glacier_outflow
                     baseflow, gw_storage = catchment.groundwater.groundwater_model(gw_storage, params.gw_n * melt_only)
                     runoff = baseflow + (1 - params.gw_n) * melt_only
 
                     et_pot = np.zeros(cswe.shape) * np.nan
                     et_act = np.zeros(cswe.shape) * np.nan
                     direct_runoff = np.nan
-
+                
+                self.state_groundwater.set_state(gw_storage,cpx)                
+                
                 rts_cur = rts.loc[date]
                 rts_cur.temp = temp[cpx].mean()
                 rts_cur.precip = precip[cpx].mean()
                 rts_cur.snowfall = snowfall.mean()
                 rts_cur.rainfall = rainfall.mean()
-                rts_cur.swe = swe[cpx].mean()
+                rts_cur.swe = self.state_swe.get_state(cpx).mean() # swe[cpx].mean()
                 rts_cur.snowmelt = snowmelt.mean()
                 rts_cur.icemelt = icemelt.mean()
                 rts_cur.melt = rts_cur.snowmelt + rts_cur.icemelt
                 rts_cur.snow_outflow = snow_outflow.mean()
                 rts_cur.ice_outflow = ice_outflow.mean()
-                rts_cur.glacier_outflow = glacier_outflow
-                rts_cur.runoff = runoff
-                rts_cur.sms = sms[cpx].mean()
+                rts_cur.glacier_outflow = glacier_outflow.mean()
+                rts_cur.runoff = runoff.mean() # AVERAGE INCLUDING ALL TRIBUTARIES!!!!!!!!!!!!!!!!!!!
+                rts_cur.sms = self.state_soilmoisture.get_state(cpx).mean() # sms[cpx].mean()
                 rts_cur.et_pot = et_pot.mean()
                 rts_cur.et = et_act.mean()
-                rts_cur.baseflow = baseflow
+                rts_cur.baseflow = baseflow.mean()
                 rts_cur.direct_runoff = direct_runoff
+                # rts_cur.icewe = self.state_icewe.get_state(cpx).mean() # activate if required
 
             rts_catchments[cid] = rts
 
