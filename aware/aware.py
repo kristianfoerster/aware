@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 from . import util
 from . import awarestatevariable
+import copy
 
 
 class Aware(object):
@@ -39,6 +40,12 @@ class Aware(object):
 
     def __init__(self):
         self.config = aware.Config()
+        # empty variable reserved for intermediate results (required for hotstart capability)
+        self.intermediate_state_swe           = None
+        self.intermediate_state_icewe         = None
+        self.intermediate_state_glacierarea   = None
+        self.intermediate_state_soilmoisture  = None
+        self.intermediate_state_groundwater   = None
 
     @property
     def config(self):
@@ -52,10 +59,10 @@ class Aware(object):
 
     def initialize(self):
         dtm, prj_settings = util.read_gdal_file(self.config.dtm_file, return_prj_settings=True)
-        glaciers = aware.util.read_gdal_file(self.config.glaciers_file)
+        self.glaciers_init = aware.util.read_gdal_file(self.config.glaciers_file)
         catchments = aware.util.read_gdal_file(self.config.catchments_file, fill_value=0)
 
-        self.input_grids = munch.Munch(dtm=dtm, glaciers=glaciers, catchments=catchments)
+        self.input_grids = munch.Munch(dtm=dtm, glaciers=self.glaciers_init, catchments=catchments)
         self.catchment_ids = np.unique(catchments[catchments > 0])
 
         # define statevariables (glacier reserved for future work)
@@ -116,25 +123,46 @@ class Aware(object):
             self.catchments[cid].melt = melt
             self.catchments[cid].pixels = (self.input_grids.catchments == cid)
 
-            cpx = self.catchments[cid].pixels
-            self.state_soilmoisture.set_state(params.sms_init, cpx)
-            self.state_swe.set_state(0., cpx)
-            self.state_icewe.set_state(0., cpx)
-            self.state_glacierarea.set_state(glaciers)
-            self.state_groundwater.set_state(params.gw_storage_init, cpx)
-
-            # this is a crude assumption which needs to be reconsidered as soon
-            # as the glacier model is coupled!
-            glaciers_pos = cpx & (glaciers > 0)
-            self.state_icewe.set_state(1e10, glaciers_pos)
-
         self.meteo = aware.Meteo(
             self.config,
             dtm,
             {cid: self.catchments[cid].pixels for cid in self.catchment_ids}
         )
 
-    def run(self):
+    def reset_state_vars(self):
+        for cid in self.catchment_ids:
+            params = self.config.params.catchments[cid]
+            cpx = self.catchments[cid].pixels
+            self.state_soilmoisture.set_state(params.sms_init, cpx)
+            self.state_swe.set_state(0., cpx)
+            self.state_icewe.set_state(0., cpx)
+            self.state_glacierarea.set_state(self.glaciers_init)
+            self.state_groundwater.set_state(params.gw_storage_init, cpx)
+
+            # this is a crude assumption which needs to be reconsidered as soon
+            # as the glacier model is coupled!
+            glaciers_pos = cpx & (self.glaciers_init > 0)
+            self.state_icewe.set_state(1e10, glaciers_pos)
+        
+
+    def run(self, hotstart=False):
+        if hotstart:
+            if self.intermediate_state_swe is not None and \
+            self.intermediate_state_icewe is not None and \
+            self.intermediate_state_glacierarea is not None and \
+            self.intermediate_state_soilmoisture is not None and \
+            self.intermediate_state_groundwater is not None:
+                self.state_swe           = copy.deepcopy(self.intermediate_state_swe)
+                self.state_icewe         = copy.deepcopy(self.intermediate_state_icewe)
+                self.state_glacierarea   = copy.deepcopy(self.intermediate_state_glacierarea)
+                self.state_soilmoisture  = copy.deepcopy(self.intermediate_state_soilmoisture)
+                self.state_groundwater   = copy.deepcopy(self.intermediate_state_groundwater)
+                print('AWARE hotstart: Resuming last run ...')
+            else:
+                print('Waring: cannot resume run in hotstart mode. Using default initialisation!')
+        else:
+            self.reset_state_vars()
+        
         start_date = pd.Timestamp(self.config.start_date).to_period('M').to_timestamp('M')
         end_date = pd.Timestamp(self.config.end_date).to_period('M').to_timestamp('M')
         assert start_date in self.meteo.dates
@@ -240,4 +268,16 @@ class Aware(object):
         results = munch.Munch()
         results.ts = pd.Panel(rts_catchments)
 
+        # Save intermediate results for consecutive runs
+        self.intermediate_state_swe           = copy.deepcopy(self.state_swe)
+        self.intermediate_state_icewe         = copy.deepcopy(self.state_icewe)
+        self.intermediate_state_glacierarea   = copy.deepcopy(self.state_glacierarea)
+        self.intermediate_state_soilmoisture  = copy.deepcopy(self.state_soilmoisture)
+        self.intermediate_state_groundwater   = copy.deepcopy(self.state_groundwater)
+
         return results
+    
+    def set_sim_period(self, t1, t2):
+        self.config.start_date = t1
+        self.config.end_date = t2
+        
