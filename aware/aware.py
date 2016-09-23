@@ -41,11 +41,11 @@ class Aware(object):
     def __init__(self):
         self.config = aware.Config()
         # empty variable reserved for intermediate results (required for hotstart capability)
-        self.intermediate_state_swe           = None
-        self.intermediate_state_icewe         = None
-        self.intermediate_state_glacierarea   = None
-        self.intermediate_state_soilmoisture  = None
-        self.intermediate_state_groundwater   = None
+        self.state_swe           = None
+        self.state_icewe         = None
+        self.state_glacierarea   = None
+        self.state_soilmoisture  = None
+        self.state_groundwater   = None
 
     @property
     def config(self):
@@ -128,6 +128,7 @@ class Aware(object):
             dtm,
             {cid: self.catchments[cid].pixels for cid in self.catchment_ids}
         )
+        self.is_ready=False
 
     def reset_state_vars(self):
         for cid in self.catchment_ids:
@@ -143,20 +144,12 @@ class Aware(object):
             # as the glacier model is coupled!
             glaciers_pos = cpx & (self.glaciers_init > 0)
             self.state_icewe.set_state(1e10, glaciers_pos)
+            self.is_ready = True
         
 
     def run(self, hotstart=False):
         if hotstart:
-            if self.intermediate_state_swe is not None and \
-            self.intermediate_state_icewe is not None and \
-            self.intermediate_state_glacierarea is not None and \
-            self.intermediate_state_soilmoisture is not None and \
-            self.intermediate_state_groundwater is not None:
-                self.state_swe           = copy.deepcopy(self.intermediate_state_swe)
-                self.state_icewe         = copy.deepcopy(self.intermediate_state_icewe)
-                self.state_glacierarea   = copy.deepcopy(self.intermediate_state_glacierarea)
-                self.state_soilmoisture  = copy.deepcopy(self.intermediate_state_soilmoisture)
-                self.state_groundwater   = copy.deepcopy(self.intermediate_state_groundwater)
+            if self.is_ready:
                 print('AWARE hotstart: Resuming last run ...')
             else:
                 print('Waring: cannot resume run in hotstart mode. Using default initialisation!')
@@ -229,7 +222,7 @@ class Aware(object):
                     )
                     # sms[cpx] = csms
                     self.state_soilmoisture.set_state(csms,cpx)
-                    percolation = perc.mean()
+                    #percolation = perc.mean()
                     direct_runoff = runoff_d.mean()
 
                     baseflow, gw_storage = catchment.groundwater.groundwater_model(gw_storage, perc)
@@ -268,16 +261,16 @@ class Aware(object):
         results = munch.Munch()
         results.ts = pd.Panel(rts_catchments)
 
-        # Save intermediate results for consecutive runs
-        self.intermediate_state_swe           = copy.deepcopy(self.state_swe)
-        self.intermediate_state_icewe         = copy.deepcopy(self.state_icewe)
-        self.intermediate_state_glacierarea   = copy.deepcopy(self.state_glacierarea)
-        self.intermediate_state_soilmoisture  = copy.deepcopy(self.state_soilmoisture)
-        self.intermediate_state_groundwater   = copy.deepcopy(self.state_groundwater)
-
         return results
     
     def set_sim_period(self, t1, t2):
         self.config.start_date = t1
         self.config.end_date = t2
         
+    def get_state_vars_from(self, other_aware):
+        self.state_swe           = copy.deepcopy(other_aware.state_swe)
+        self.state_icewe         = copy.deepcopy(other_aware.state_icewe)
+        self.state_glacierarea   = copy.deepcopy(other_aware.state_glacierarea)
+        self.state_soilmoisture  = copy.deepcopy(other_aware.state_soilmoisture)
+        self.state_groundwater   = copy.deepcopy(other_aware.state_groundwater)
+        self.is_ready = True
