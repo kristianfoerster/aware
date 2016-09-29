@@ -14,12 +14,18 @@ class HTree:
         self.id = id
         self.order=0
         self.level=0
+        self.area = 0
+        self.subarea = 0
         self.tributaries = []
+        self.downstream_node = None
         if tributaries is not None:
             for tributary in tributaries:
+                tributary.downstream_node = self.id
                 self.add_tributary(tributary)
+        
     def add_tributary(self,tributary):
         assert isinstance(tributary, HTree)
+        tributary.downstream_node = self.id
         self.tributaries.append(tributary)
 
     def add_new_tributary_id(self, suggested_id=1):
@@ -83,6 +89,15 @@ class HTree:
         for i,tributary in enumerate(self.tributaries):
             tributary.assign_priority(start_node)
 
+    def calculate_sub_areas(self):
+        if len(self.tributaries) == 0:
+            self.subarea = self.area
+        defined_areas = self.area
+        for i,tributary in enumerate(self.tributaries):
+            defined_areas -= tributary.calculate_sub_areas()
+        self.subarea = defined_areas
+        return defined_areas
+
     def postprocess_tree(self, offset=0):
         # get number of nodes and number of levels (depth)
         n_nodes,max_depth = self.get_tree_size()      
@@ -90,6 +105,8 @@ class HTree:
         self.calculate_computation_level(max_depth)
         # compute computation priority
         self.calculate_computation_priority(n_nodes+offset)
+        # define sub-cacthment areas without upstream areas
+        self.calculate_sub_areas()
        
         return n_nodes, max_depth
 
@@ -103,4 +120,27 @@ class HTree:
              print('%i' % (self.id))
              tributary.list_tree()
 
-        
+    def set_area(self,area):
+        self.area = area        
+
+    def get_tree_by_id(self,id):
+        target_node = None
+        if self.id == id:
+            return self
+        for i,tributary in enumerate(self.tributaries):
+            target_node_i = tributary.get_tree_by_id(id)
+            if target_node_i is not None:
+                target_node = target_node_i
+        return target_node
+
+    
+    def get_upstream_areas(self):
+        list_ids = list()
+        list_areas = list()
+        for i,tributary in enumerate(self.tributaries):
+            list_ids.append(tributary.id)
+            list_areas.append(tributary.subarea)
+            ids_up, areas_up = tributary.get_upstream_areas()
+            list_ids += ids_up
+            list_areas +=areas_up
+        return list_ids, list_areas

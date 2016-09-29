@@ -8,7 +8,9 @@ import pandas as pd
 from . import util
 from . import awarestatevariable
 import copy
-
+import os
+import dateutil
+import pickle
 
 class Aware(object):
     _results_time_series_columns = '''
@@ -30,7 +32,7 @@ class Aware(object):
         baseflow
         direct_runoff
     '''.strip().split()
-
+        
     @classmethod
     def run_aware(cls, config):
         aw = cls()
@@ -61,16 +63,57 @@ class Aware(object):
         dtm, prj_settings = util.read_gdal_file(self.config.dtm_file, return_prj_settings=True)
         self.glaciers_init = aware.util.read_gdal_file(self.config.glaciers_file)
         catchments = aware.util.read_gdal_file(self.config.catchments_file, fill_value=0)
+        self.hydrographictree = pickle.load(open(self.config.hydrographictree_file,'rb'))
 
         self.input_grids = munch.Munch(dtm=dtm, glaciers=self.glaciers_init, catchments=catchments)
         self.catchment_ids = np.unique(catchments[catchments > 0])
 
         # define statevariables (glacier reserved for future work)
-        self.state_swe          = awarestatevariable.AwareStateVariable('Snow water equivalent SWE', prj_settings, None, None, catchments>0)
-        self.state_icewe        = awarestatevariable.AwareStateVariable('Ice water equivalent',      prj_settings, None, None, catchments>0)
-        self.state_glacierarea  = awarestatevariable.AwareStateVariable('Glaciated area',            prj_settings, None, None, catchments>0)
-        self.state_soilmoisture = awarestatevariable.AwareStateVariable('Soil moisture storage',     prj_settings, None, None, catchments>0)
-        self.state_groundwater  = awarestatevariable.AwareStateVariable('Groundwater storage',       prj_settings, None, None, catchments>0)
+        self.state_swe          = awarestatevariable.AwareStateVariable('swe', 'Snow water equivalent SWE', prj_settings, None, None, catchments>0)
+        self.state_icewe        = awarestatevariable.AwareStateVariable('iwe', 'Ice water equivalent',      prj_settings, None, None, catchments>0)
+        self.state_glacierarea  = awarestatevariable.AwareStateVariable('glc', 'Glaciated area',            prj_settings, None, None, catchments>0)
+        self.state_soilmoisture = awarestatevariable.AwareStateVariable('sms', 'Soil moisture storage',     prj_settings, None, None, catchments>0)
+        self.state_groundwater  = awarestatevariable.AwareStateVariable('gws', 'Groundwater storage',       prj_settings, None, None, catchments>0)
+
+        # remember projection settings
+        # self.prj_settings = prj_settings
+
+        # sub-catchments
+        self.catchments = munch.Munch()
+        for cid in self.catchment_ids:
+            # catchment parameters
+            self.catchments[cid] = munch.Munch()
+
+            # hydrographic tree and structure of the basin
+            for ti in self.hydrographictree:
+                tree = ti.get_tree_by_id(cid)
+                if tree is not None:
+                    break
+            # get tributaries
+            ids, areas = tree.get_upstream_areas()
+            self.catchments[cid].upstream_ids = np.array(ids)
+            self.catchments[cid].upstream_areas = np.array(areas)
+            # relative contribution of tributaries
+            self.catchments[cid].upstream_areas = self.catchments[cid].upstream_areas / tree.area
+            # own contribution
+            self.catchments[cid].area = 1. - np.sum(self.catchments[cid].upstream_areas)
+            # computation order
+            self.catchments[cid].priority = tree.order
+            
+            self.catchments[cid].next = tree.downstream_node
+            
+            a = np.array([self.catchments[cid].area])
+            a = np.append(a, self.catchments[cid].upstream_areas)
+            print(tree.area)
+            print('%i\t' % (cid), (a*tree.area).astype(int), end='')
+            print('\tSumme=%.3f' % np.sum(a))
+
+        # rearange computation order of catchments 
+        # dictionary including ids and priorities
+        p = {id: self.catchments[id].priority for id in self.catchments.keys()}
+        # ordered by priority
+        self.computation_order = sorted(p, key=lambda f: p[f])
+
       
         default_params = self.config.params.default
         catchment_params = {cid: default_params.copy() for cid in self.catchment_ids}
@@ -79,7 +122,7 @@ class Aware(object):
                 catchment_params[cid] = default_params.items() + self.config.params.catchments[cid].items()
         self.config.params.catchments = munch.munchify(catchment_params)
 
-        self.catchments = munch.Munch()
+        
         for cid in self.catchment_ids:
             params = self.config.params.catchments[cid]
             
@@ -116,21 +159,24 @@ class Aware(object):
             melt.rain_corr = params.rain_corr
             melt.snow_corr = params.snow_corr
 
-            self.catchments[cid] = munch.Munch()
             self.catchments[cid].soil = soil
             self.catchments[cid].groundwater = groundwater
             self.catchments[cid].evapotranspiration = evapotranspiration
             self.catchments[cid].melt = melt
             self.catchments[cid].pixels = (self.input_grids.catchments == cid)
-
+            
+        
         self.meteo = aware.Meteo(
             self.config,
             dtm,
             {cid: self.catchments[cid].pixels for cid in self.catchment_ids}
         )
-        self.is_ready=False
+        self.is_initialized = True
+        self.is_ready       = False
 
     def reset_state_vars(self):
+        if not self.is_initialized:
+            return False
         for cid in self.catchment_ids:
             params = self.config.params.catchments[cid]
             cpx = self.catchments[cid].pixels
@@ -144,10 +190,14 @@ class Aware(object):
             # as the glacier model is coupled!
             glaciers_pos = cpx & (self.glaciers_init > 0)
             self.state_icewe.set_state(1e10, glaciers_pos)
-            self.is_ready = True
-        
+        self.is_ready = True
+        self.timestamp = pd.Timestamp(self.config.start_date).to_period('M').to_timestamp('M')
+        return True
 
     def run(self, hotstart=False):
+        if not self.is_initialized and not self.is_ready:
+            print('Error: Model has not been initialized or prepared with initial states.')
+            return
         if hotstart:
             if self.is_ready:
                 print('AWARE hotstart: Resuming last run ...')
@@ -163,10 +213,12 @@ class Aware(object):
 
         dates = pd.date_range(start=start_date, end=end_date, freq='M')
 
-        rts_catchments = collections.OrderedDict()
+        rts_catchments = collections.OrderedDict() # results including upstream areas
+        rts_catchments_sub_mean = collections.OrderedDict() # results sub-catchment only
         rts = pd.DataFrame(index=dates, columns=self._results_time_series_columns, dtype=float)
         for cid in self.catchment_ids:
             rts_catchments[cid] = rts.copy()
+            rts_catchments_sub_mean[cid] = rts.copy()
 
         for date in dates:
             print(date)
@@ -174,7 +226,7 @@ class Aware(object):
             temp, precip = self.meteo.get_meteo(date)
             glaciers = self.state_glacierarea.get_state() # couple glacier model here!
 
-            for cid in self.catchment_ids:
+            for cid in self.computation_order:
                 params = self.config.params.catchments[cid]
                 catchment = self.catchments[cid]
                 cpx = self.catchments[cid].pixels
@@ -238,34 +290,72 @@ class Aware(object):
                 
                 self.state_groundwater.set_state(gw_storage,cpx)                
                 
-                rts_cur = rts_catchments[cid].loc[date]
-                rts_cur.temp = temp[cpx].mean()
-                rts_cur.precip = precip[cpx].mean()
+                
+                rts_cur = rts_catchments_sub_mean[cid].loc[date]
+                
+                # calculate averages for sub-catchment without tributaries
+                rts_cur.temp     = temp[cpx].mean()
+                rts_cur.precip   = precip[cpx].mean()
                 rts_cur.snowfall = snowfall.mean()
                 rts_cur.rainfall = rainfall.mean()
-                rts_cur.swe = self.state_swe.get_state(cpx).mean()
+                rts_cur.swe      = self.state_swe.get_state(cpx).mean()
                 rts_cur.snowmelt = snowmelt.mean()
-                rts_cur.icemelt = icemelt.mean()
-                rts_cur.melt = rts_cur.snowmelt + rts_cur.icemelt
+                rts_cur.icemelt  = icemelt.mean()
+                rts_cur.melt     = rts_cur.snowmelt + rts_cur.icemelt
                 rts_cur.snow_outflow = snow_outflow.mean()
                 rts_cur.ice_outflow = ice_outflow.mean()
                 rts_cur.glacier_outflow = glacier_outflow.mean()
-                rts_cur.runoff = runoff.mean() # AVERAGE INCLUDING ALL TRIBUTARIES!!!!!!!!!!!!!!!!!!!
-                rts_cur.sms = self.state_soilmoisture.get_state(cpx).mean()
-                rts_cur.et_pot = et_pot.mean()
-                rts_cur.et = et_act.mean()
+                rts_cur.runoff   = runoff.mean()
+                rts_cur.sms      = self.state_soilmoisture.get_state(cpx).mean()
+                rts_cur.et_pot   = et_pot.mean()
+                rts_cur.et       = et_act.mean()
                 rts_cur.baseflow = baseflow.mean()
                 rts_cur.direct_runoff = direct_runoff
                 # rts_cur.icewe = self.state_icewe.get_state(cpx).mean() # activate if required
+                
+                # prepare averages
+                rts_catchments[cid].loc[date] = self.catchments[cid].area * rts_catchments_sub_mean[cid].loc[date]                
+                
+                # add results of tributaries
+                for ii in range(0,len(self.catchments[cid].upstream_ids)):
+                    sub_id = self.catchments[cid].upstream_ids[ii]
+                    sub_n  = self.catchments[cid].upstream_areas[ii]
+                    
+                    # tributaries
+                    rts_cur_sub = rts_catchments_sub_mean[sub_id].loc[date]
+                    # set results to total upstream area
+                    rts_cur = rts_catchments[cid].loc[date]
+
+                    rts_cur.temp     += sub_n * rts_cur_sub.temp
+                    rts_cur.precip   += sub_n * rts_cur_sub.precip
+                    rts_cur.snowfall += sub_n * rts_cur_sub.snowfall
+                    rts_cur.rainfall += sub_n * rts_cur_sub.rainfall
+                    rts_cur.swe      += sub_n * rts_cur_sub.swe
+                    rts_cur.snowmelt += sub_n * rts_cur_sub.snowmelt
+                    rts_cur.icemelt  += sub_n * rts_cur_sub.icemelt
+                    rts_cur.melt     += sub_n * rts_cur_sub.melt
+                    rts_cur.snow_outflow += sub_n * rts_cur_sub.snow_outflow
+                    rts_cur.ice_outflow += sub_n * rts_cur_sub.ice_outflow
+                    rts_cur.glacier_outflow += sub_n * rts_cur_sub.glacier_outflow
+                    rts_cur.runoff   += sub_n * rts_cur_sub.runoff
+                    rts_cur.sms      += sub_n * rts_cur_sub.sms
+                    rts_cur.et_pot   += sub_n * rts_cur_sub.et_pot
+                    rts_cur.et       += sub_n * rts_cur_sub.et
+                    rts_cur.baseflow += sub_n * rts_cur_sub.baseflow
+                    rts_cur.direct_runoff += sub_n * rts_cur_sub.direct_runoff
 
         results = munch.Munch()
         results.ts = pd.Panel(rts_catchments)
+
+        # remember timestamp
+        self.timestamp = date
 
         return results
     
     def set_sim_period(self, t1, t2):
         self.config.start_date = t1
         self.config.end_date = t2
+        self.timestamp = pd.Timestamp(t1).to_period('M').to_timestamp('M')
         
     def get_state_vars_from(self, other_aware):
         self.state_swe           = copy.deepcopy(other_aware.state_swe)
@@ -273,4 +363,47 @@ class Aware(object):
         self.state_glacierarea   = copy.deepcopy(other_aware.state_glacierarea)
         self.state_soilmoisture  = copy.deepcopy(other_aware.state_soilmoisture)
         self.state_groundwater   = copy.deepcopy(other_aware.state_groundwater)
+        self.is_ready = True
+
+    def get_working_directory(self):
+        # check if variable and folder exists
+        dir = './'
+        if isinstance(self.config['out_dir'],str):
+            if os.path.isdir(self.config['out_dir']):
+                dir = self.config['out_dir']
+        return dir
+
+    def write_states(self, add_timestamp = False, verbose=False):
+        dir = self.get_working_directory()
+        if add_timestamp:
+            timestamp = self.timestamp
+        else:
+            timestamp = None
+        self.state_swe.export_state(dir, timestamp=timestamp, verbose=verbose)
+        self.state_icewe.export_state(dir, timestamp=timestamp, verbose=verbose)
+        self.state_glacierarea.export_state(dir, timestamp=timestamp, verbose=verbose)
+        self.state_soilmoisture.export_state(dir, timestamp=timestamp, verbose=verbose)
+        self.state_groundwater.export_state(dir, timestamp=timestamp, verbose=verbose)
+
+    def load_states(self, add_timestamp = False, verbose=False, prev_month=False):
+        dir = self.get_working_directory()
+        if add_timestamp:
+            if prev_month:
+                timestamp = self.timestamp - dateutil.relativedelta.relativedelta(months=1)
+            else:
+                timestamp = self.timestamp
+            if verbose:
+                ts_start = '%4i-%02i' % (self.timestamp.year, self.timestamp.month)
+                ts_prev  = '%4i-%02i' % (timestamp.year, timestamp.month)
+                if prev_month:
+                    print('Simulation start: %s, loading states from previous month %s' % (ts_start, ts_prev))
+                else:
+                    print('Simulation start: %s, loading states from previous current %s' % (ts_start, ts_prev))
+        else:
+            timestamp = None
+        self.state_swe.import_state(dir, timestamp=timestamp, verbose=verbose)
+        self.state_icewe.import_state(dir, timestamp=timestamp, verbose=verbose)
+        self.state_glacierarea.import_state(dir, timestamp=timestamp, verbose=verbose)
+        self.state_soilmoisture.import_state(dir, timestamp=timestamp, verbose=verbose)
+        self.state_groundwater.import_state(dir, timestamp=timestamp, verbose=verbose)
         self.is_ready = True
