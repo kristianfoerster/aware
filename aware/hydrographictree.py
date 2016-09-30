@@ -166,7 +166,9 @@ class HTree:
         '''The area of the sub-catchment upstream of each node is calculated
         taking it into account that delineated upstream areas are defined
         seprately (i.e., only the are betwenn two nodes is returned).
-    
+
+        Returns:
+        upstream area that is represented by other nodes
         '''
         if len(self.tributaries) == 0:
             self.subarea = self.area
@@ -174,6 +176,7 @@ class HTree:
         for i,tributary in enumerate(self.tributaries):
             defined_areas -= tributary.calculate_sub_areas()
         self.subarea = defined_areas
+        return defined_areas
 
     def postprocess_tree(self, offset=0):
         '''Calling this function is a convenient way to poceed with the most
