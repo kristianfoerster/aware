@@ -132,7 +132,7 @@ class Aware(object):
         if 'catchments' in self.config.params:
             for cid in reverse_order:
                 # assign downstream parameters if relevant                
-                for dwid in self.catchments[cid].downstream_path:
+                for dwid in self.catchments[cid].downstream_path[::-1]:
                     if dwid in self.config.params.catchments.keys():
                         print('[%02i] apply parameters from area %02i...' % (cid,dwid))
                         # catchment_params[cid] += self.config.params.catchments[dwid].items()
