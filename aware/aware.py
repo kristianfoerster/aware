@@ -85,7 +85,7 @@ class Aware(object):
             self.catchments[cid] = munch.Munch()
 
             # hydrographic tree and structure of the basin
-            for ti in self.hydrographictree:
+            for subtree_id, ti in enumerate(self.hydrographictree):
                 tree = ti.get_tree_by_id(cid)
                 if tree is not None:
                     break
@@ -102,24 +102,46 @@ class Aware(object):
             
             self.catchments[cid].next = tree.downstream_node
             
+            # downstream path to outlet (for assigment of parameters)
+            self.catchments[cid].downstream_path = self.hydrographictree[subtree_id].get_downstream_path(cid)
+            
             a = np.array([self.catchments[cid].area])
             a = np.append(a, self.catchments[cid].upstream_areas)
-            print(tree.area)
-            print('%i\t' % (cid), (a*tree.area).astype(int), end='')
-            print('\tSumme=%.3f' % np.sum(a))
+            #print(tree.area)
+            #print('%i\t' % (cid), (a*tree.area).astype(int), end='')
+            #print('\tSumme=%.3f' % np.sum(a))
+
 
         # rearange computation order of catchments 
         # dictionary including ids and priorities
         p = {id: self.catchments[id].priority for id in self.catchments.keys()}
         # ordered by priority
         self.computation_order = sorted(p, key=lambda f: p[f])
+        # reverse order
+        reverse_order = self.computation_order[::-1]
 
       
         default_params = self.config.params.default
         catchment_params = {cid: default_params.copy() for cid in self.catchment_ids}
+        # old method: assign catchment parameters if available. 
+        #if 'catchments' in self.config.params:
+        #    for cid in self.config.params.catchments.keys():
+        #        catchment_params[cid] = default_params.items() + self.config.params.catchments[cid].items()
+
+        # new method: get information from downstream areas as well
         if 'catchments' in self.config.params:
-            for cid in self.config.params.catchments.keys():
-                catchment_params[cid] = default_params.items() + self.config.params.catchments[cid].items()
+            for cid in reverse_order:
+                # assign downstream parameters if relevant                
+                for dwid in self.catchments[cid].downstream_path:
+                    if dwid in self.config.params.catchments.keys():
+                        print('[%02i] apply parameters from area %02i...' % (cid,dwid))
+                        # catchment_params[cid] += self.config.params.catchments[dwid].items()
+                        for dii in default_params.keys():
+                            if dii in self.config.params.catchments[dwid].keys():
+                                catchment_params[cid][dii] = self.config.params.catchments[dwid][dii]
+                                print('    ... overwrite %s' % dii)
+                print(catchment_params[cid]['ddf_ice'])                
+
         self.config.params.catchments = munch.munchify(catchment_params)
 
         

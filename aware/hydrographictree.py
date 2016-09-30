@@ -6,6 +6,7 @@ Created on Fri Sep 23 08:15:26 2016
 """
 
 import numpy as np
+import copy
 
 class HTree:
     '''Hydrographic Tree class for AWARE'''
@@ -144,3 +145,29 @@ class HTree:
             list_ids += ids_up
             list_areas +=areas_up
         return list_ids, list_areas
+        
+    def get_downstream_list(self, id, idlist=None):
+        if idlist is None:
+            new_list = list()
+        else:
+            new_list = copy.deepcopy(idlist)
+        new_list.append(self.id)
+        if id in new_list:
+            return new_list
+        for i,tributary in enumerate(self.tributaries):
+            li = tributary.get_downstream_list(id, new_list)
+            if id in li:
+                return li
+            else:
+                del li
+        
+        return new_list
+        
+    def get_downstream_path(self, id):
+        reverse_list = self.get_downstream_list(id)
+        return reverse_list[::-1]
+        if id in reverse_list:
+            return reverse_list[::-1]
+        else:
+            return [id]
+        
