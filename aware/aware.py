@@ -13,6 +13,9 @@ import dateutil
 import pickle
 
 class Aware(object):
+    '''This class represents the Alpine WAter balance and Runoff Estimation model
+    (AWARE) and its core functionality.
+    '''    
     _results_time_series_columns = '''
         temp
         precip
@@ -60,6 +63,10 @@ class Aware(object):
         self._config = c
 
     def initialize(self):
+        '''Calling this function prior to the application of the model is mandatory.
+        It prepares the model structure (computation of sub-basins) and sets all
+        relevant parameters needed for simulations.
+        '''
         dtm, prj_settings = util.read_gdal_file(self.config.dtm_file, return_prj_settings=True)
         self.glaciers_init = aware.util.read_gdal_file(self.config.glaciers_file)
         catchments = aware.util.read_gdal_file(self.config.catchments_file, fill_value=0)
@@ -197,6 +204,9 @@ class Aware(object):
         self.is_ready       = False
 
     def reset_state_vars(self):
+        '''Resets state variables as prescribed in the config file.
+        
+        '''       
         if not self.is_initialized:
             return False
         for cid in self.catchment_ids:
@@ -217,6 +227,12 @@ class Aware(object):
         return True
 
     def run(self, hotstart=False):
+        '''Performs an AWARE simulation and returns the results (time series).
+        
+        Returns
+        ----
+        pandas data frame including the results
+        '''
         if not self.is_initialized and not self.is_ready:
             print('Error: Model has not been initialized or prepared with initial states.')
             return
@@ -375,11 +391,25 @@ class Aware(object):
         return results
     
     def set_sim_period(self, t1, t2):
+        '''Defines the simulation period.
+        
+        Parameters
+        ----
+        t1: start time (string, e.g. '2015-10')
+        t2: termination time (string, e.g. '2016-07')
+        '''       
         self.config.start_date = t1
         self.config.end_date = t2
         self.timestamp = pd.Timestamp(t1).to_period('M').to_timestamp('M')
         
-    def get_state_vars_from(self, other_aware):
+    def copy_state_vars_from(self, other_aware):
+        '''Transfers the state variables of another AWARE object to the current
+        object.
+        
+        Parameters
+        ----
+        other_aware: an instance of an AWARE object whose states will be loaded
+        '''       
         self.state_swe           = copy.deepcopy(other_aware.state_swe)
         self.state_icewe         = copy.deepcopy(other_aware.state_icewe)
         self.state_glacierarea   = copy.deepcopy(other_aware.state_glacierarea)
@@ -388,6 +418,13 @@ class Aware(object):
         self.is_ready = True
 
     def get_working_directory(self):
+        '''Generates the path to the working directory ('out_dir' in the config
+        file) taking into account operating system specific ways to concatenate
+        sub-directories.
+        
+        '''       
+        dir = self.get_working_directory()
+        
         # check if variable and folder exists
         dir = './'
         if isinstance(self.config['out_dir'],str):
@@ -396,6 +433,20 @@ class Aware(object):
         return dir
 
     def write_states(self, add_timestamp = False, verbose=False):
+        '''Exports all relevant state variables to files. The function is
+        also capable of handling timestamps included in the file name. In this
+        way, system states will be remebered for arbitrary time steps even if
+        the model is interrupted.
+        
+        Parameters
+        ----
+        add_timestamp: adds the timestamp mode to the file input functions
+        verbose: prints details to the screen
+        prev_month: reads grids labeled for the previous month (relevant for resuming runs)
+    
+        '''       
+        dir = self.get_working_directory()
+
         dir = self.get_working_directory()
         if add_timestamp:
             timestamp = self.timestamp
@@ -408,6 +459,18 @@ class Aware(object):
         self.state_groundwater.export_state(dir, timestamp=timestamp, verbose=verbose)
 
     def load_states(self, add_timestamp = False, verbose=False, prev_month=False):
+        '''Loads all relevant state variables needed for AWARE runs from disk.
+        This is important to run the model in hotstart mode. The function is
+        also capable of handling timestamps included in the file name. In this
+        way, system states defined for specified time can be loaded efficiently.
+        
+        Parameters
+        ----
+        add_timestamp: adds the timestamp mode to the file input functions
+        verbose: prints details to the screen
+        prev_month: reads grids labeled for the previous month (relevant for resuming runs)
+    
+        '''       
         dir = self.get_working_directory()
         if add_timestamp:
             if prev_month:

@@ -10,8 +10,23 @@ import numpy as np
 import os
 
 class AwareStateVariable:
+    '''AwareStateVariable is class including methods and attributes to manage
+    state variables required for hydrological simulations using the AWARE model.
+    '''
     
     def __init__(self, name, long_name, prj_settings=None, init_grid=None, init_single_val=None, index=None):
+        '''Constructor method for AwareStateVariable.
+        
+        Parameters
+        ----
+        name: short name used for naming of files
+        long_name: a more detailed label of the object
+        prj_settings*: dictionary including the projection settings (rasterio format)
+        init_grid*: inital state provided as grid
+        init_single_val*: value that will be uniformly applied to the grid
+        index*: array index representing a subset of the grid which will be initialized
+
+        '''
         if prj_settings is None:
             raise 'Insufficent information provided! Either projection or x/y dimension needs to be specified.'
         self.name = name
@@ -30,18 +45,45 @@ class AwareStateVariable:
                     self.state[index] = init_single_val
     
     def get_state(self, index=None):
+        '''Returns the state variable's grid.
+        
+        Parameters
+        ----
+        index*: optional argument to request a subset of the grid values
+    
+        Returns
+        ----    
+        system state as grid
+        '''
         if index is not None:
             return self.state[index]
         else:
             return self.state
     
     def set_state(self, data, index=None):
+        '''Passes a grid to the system state grid and overwrites it.
+        
+        Parameters
+        ----
+        data: grid representing the new system state
+        index*: optional subset definition
+    
+        '''       
         if index is not None:
             self.state[index] = data
         else:
             self.state = data
     
     def import_state(self, filename, timestamp=None, verbose=False):
+        '''Read system state from file.
+        
+        Parameters
+        ----
+        filename: file that includes the system state grid to be read
+        timestamp*: reads grid only that includes this time step in the file name (optional)
+        verbose*: optional argument forcing the method to display additional information
+    
+        '''
         if os.path.isdir(filename):
             # this is a directory, pass automatically generated file name to path
             infile = os.path.join(filename, self.get_state_filename(timestamp))
@@ -54,6 +96,15 @@ class AwareStateVariable:
             print('State variable %s updated from file %s.' % (self.name, infile))
                 
     def export_state(self, filename, timestamp=None, verbose=False):
+        '''Exports system state to a local file.
+        
+        Parameters
+        ----
+        filename: target file
+        timestamp*: adds a timestamp to the file name (optional)
+        verbose*: optional argument forcing the method to display additional information
+    
+        '''
         if os.path.isdir(filename):
             # this is a directory, pass automatically generated file name to path
             outfile = os.path.join(filename, self.get_state_filename(timestamp))
@@ -68,6 +119,18 @@ class AwareStateVariable:
             print('No projection settings defined!')
 
     def get_state_filename(self, timestamp=None):
+        '''Generates a file name for i/o of system states taking model time
+        into consideration.
+        
+        Parameters
+        ----
+        timestamp*: reads grid only that includes this time step in the file name (optional)
+
+        Returns
+        ----
+        file name string
+    
+        '''
         extension = '.tif'
         if timestamp is not None:
             extension = '_%4i%02i.tif' % (timestamp.year, timestamp.month)

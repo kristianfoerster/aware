@@ -9,8 +9,17 @@ import numpy as np
 import copy
 
 class HTree:
-    '''Hydrographic Tree class for AWARE'''
+    '''Hydrographic Tree class for AWARE
     
+    HTree represnts the structure of a basin and its sub-catchments. Nodes
+    represent sub-catchments and segements (i.e. the way how these nodes are
+    connected) can be viewed as rivers. The class and its methods provides
+    the most important features to generate a dendritic structure of sub-
+    catchments and the correct interlinkage of tributaries. This helps in
+    assigning model parameters and evaluating results in hydrologic modelling.
+    A hydrographic tree can be generated through analyses of digital elevation
+    models.
+    '''    
     def __init__(self, id=0, tributaries=None):
         self.id = id
         self.order=0
