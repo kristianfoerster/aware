@@ -5,6 +5,7 @@ import netCDF4
 import numpy as np
 import pandas as pd
 from . import util
+import os
 
 class Meteo(object):
     def __init__(self, config, dtm, catchment_pixels):
@@ -21,6 +22,7 @@ class Meteo(object):
         # read histalp DTM
         # XXX fix this (flip u/d errors, ...)
         # histalp.surface = util.read_gdal_file(config.histalp_dtm_file)
+        # @todo: rename histalp to reference_grid or similar
         nc = netCDF4.Dataset(config.histalp_dtm_file, 'r')
         histalp.surface = nc['HSURF'][:, :]
 
@@ -42,6 +44,7 @@ class Meteo(object):
             self.temp_intercept = npz['temp_intercept']
             self.precip_slope = npz['precip_slope']
             self.precip_intercept = npz['precip_intercept']
+            self.temp_bias = npz['temp_bias']
 
             if config.meteo_type == 'cfs':
                 self.nc = netCDF4.Dataset(config.meteo_file, 'r')
@@ -53,9 +56,45 @@ class Meteo(object):
                 # set hour to 0 for all dates
                 for date_num, date in enumerate(self.dates):
                     date_new = pd.datetime(date.year, date.month, date.day, 0)
-                    self.dates[date_num] = date_new
+                    self.dates[date_num] = date_new            
+            elif config.meteo_type == 'glosea5':
+                # in contrast to other data sources, each time step is stored separately
+                # therefore, config.meteo_file is the file name without datetime and
+                # variable information, e.g.:
+                # Amon_GloSea5_horizlResImpact_S19960425_r1i1p1
+                self.nc = config.meteo_file
+                self.ncpath = config.meteo_path
+                self.temp_file_identifier = 'tas'
+                self.precip_file_identifier = 'pr'
+                # at this stage, only start and end dates are known
+                start_date = pd.Timestamp(self.config.start_date).to_period('M').to_timestamp('M')
+                end_date   = pd.Timestamp(self.config.end_date).to_period('M').to_timestamp('M')               
+                self.dates = pd.date_range(start=start_date, end=end_date, freq='M')
             else:
                 raise ValueError('Meteo type %s not supported' % config.meteo_type)
+
+    def _get_meteo_glosea5(self, date):
+        date = pd.Timestamp(date)
+        yyyy = date.year
+        mm = date.month
+        string = self.nc
+        filename_t = 'tas_%s_%4i%02i-%4i%02i.nc' % (string, yyyy, mm, yyyy, mm)
+        filename_p = 'pr_%s_%4i%02i-%4i%02i.nc' % (string, yyyy, mm, yyyy, mm)
+        path_t = os.path.join(self.ncpath, filename_t)
+        path_p = os.path.join(self.ncpath, filename_p)
+        
+        # read temperature
+        nct = netCDF4.Dataset(path_t, 'r')
+        temp_var = nct.variables['tas']
+        temp = temp_var[0, :, :]
+        nct.close()
+        
+        # read precipitation
+        ncp = netCDF4.Dataset(path_p, 'r')
+        prec_var = ncp.variables['pr']
+        prec = prec_var[:, :] # precipitation files do not have a time dimension
+        ncp.close()
+        return self._meteo_mapping(date, temp, prec, temp_const_bias = True)
 
     def _get_meteo_histalp(self, date):
         date = pd.Timestamp(date)
@@ -74,22 +113,29 @@ class Meteo(object):
 
         temp_cfs = self.temp[pos, :, :]
         precip_cfs = self.precip[pos, :, :]
+        return self._meteo_mapping(date, temp_cfs, precip_cfs)
 
+
+    def _meteo_mapping(self, date, temp, precip, temp_const_bias = False):
         mx = self.mapping_x
         my = self.mapping_y
-
         temp_slope = self.temp_slope[date.month - 1, :, :]
         temp_intercept = self.temp_intercept[date.month - 1, :, :]
         precip_slope = self.precip_slope[date.month - 1, :, :]
         precip_intercept = self.precip_intercept[date.month - 1, :, :]
-
+        temp_bias = self.temp_bias[date.month - 1, :, :]
         num_days_per_month = calendar.monthrange(date.year, date.month)[1]
 
-        temp_histalp = temp_intercept + temp_slope * temp_cfs[my, mx] - 273.15
-        precip_histalp = precip_intercept + precip_slope * precip_cfs[my, mx] * num_days_per_month * 86400.
-        precip_histalp = precip_histalp.clip(0.)
+        if temp_const_bias:
+            print('Bias added.')
+            temp_reference = temp[my, mx] - temp_bias - 273.15
+        else:
+            temp_reference = temp_intercept + temp_slope * temp[my, mx] - 273.15
+        
+        precip_reference = precip_intercept + precip_slope * precip[my, mx] * num_days_per_month * 86400.
+        precip_reference = precip_reference.clip(0.)
 
-        return temp_histalp, precip_histalp
+        return temp_reference, precip_reference
 
     def _histalp_to_model_grid(self, date, temp_histalp, precip_histalp):
         temp_lapse_rates = np.zeros(self.dtm.shape) * np.nan
@@ -112,5 +158,7 @@ class Meteo(object):
             temp, precip = self._get_meteo_histalp(date)
         elif self.config.meteo_type == 'cfs':
             temp, precip = self._get_meteo_cfs(date)
+        elif self.config.meteo_type == 'glosea5':
+            temp, precip = self._get_meteo_glosea5(date)
 
         return self._histalp_to_model_grid(date, temp, precip)
