@@ -127,7 +127,7 @@ class Meteo(object):
         num_days_per_month = calendar.monthrange(date.year, date.month)[1]
 
         if temp_const_bias:
-            print('Bias added.')
+            # print('Bias added.')
             temp_reference = temp[my, mx] - temp_bias - 273.15
         else:
             temp_reference = temp_intercept + temp_slope * temp[my, mx] - 273.15

@@ -200,6 +200,10 @@ class Aware(object):
             dtm,
             {cid: self.catchments[cid].pixels for cid in self.catchment_ids}
         )
+        self.write_dates = list()
+        if 'write_dates' in self.config:
+            for di in self.config.write_dates:
+                self.write_dates.append(pd.Timestamp(di).to_period('M').to_timestamp('M'))
         self.is_initialized = True
         self.is_ready       = False
 
@@ -382,11 +386,15 @@ class Aware(object):
                     rts_cur.baseflow += sub_n * rts_cur_sub.baseflow
                     rts_cur.direct_runoff += sub_n * rts_cur_sub.direct_runoff
 
+            # remember timestamp
+            self.timestamp = date
+            
+            # write stats if required
+            if date in self.write_dates:
+                self.write_states(add_timestamp = True, verbose=True)
+
         results = munch.Munch()
         results.ts = pd.Panel(rts_catchments)
-
-        # remember timestamp
-        self.timestamp = date
 
         return results
     
@@ -423,7 +431,6 @@ class Aware(object):
         sub-directories.
         
         '''       
-        dir = self.get_working_directory()
         
         # check if variable and folder exists
         dir = './'
