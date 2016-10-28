@@ -13,38 +13,55 @@ class Meteo(object):
         self.dtm = dtm
         self.catchment_pixels = catchment_pixels
 
-        histalp = munch.Munch()
-        self.histalp = histalp
-        npz = np.load(config.histalp_mapping_file)
-        histalp.mapping_x = npz['mapping_x']
-        histalp.mapping_y = npz['mapping_y']
+        reference = munch.Munch()
+        self.reference = reference
+        npz = np.load(config.reference_mapping_file)
+        reference.mapping_x = npz['mapping_x']
+        reference.mapping_y = npz['mapping_y']
 
         # read histalp DTM
         # XXX fix this (flip u/d errors, ...)
         # histalp.surface = util.read_gdal_file(config.histalp_dtm_file)
         # @todo: rename histalp to reference_grid or similar
-        nc = netCDF4.Dataset(config.histalp_dtm_file, 'r')
-        histalp.surface = nc['HSURF'][:, :]
+        nc = netCDF4.Dataset(config.reference_dtm_file, 'r')
+        reference.surface = nc['HSURF'][:, :]
+
+        # get reference climatology
+        #np.savez(outfile, mean_temp=month_clim_T, std_temp=month_stdv_T, \
+        #        mean_prec=month_clim_P, std_prec=month_stdv_P)
+        npz = np.load(config.meteo_ref_climatology_file)
+        self.ref_avg_temp = npz['mean_temp']
+        self.ref_std_temp = npz['std_temp']
+        self.ref_avg_prec = npz['mean_prec']
+        self.ref_std_prec = npz['std_prec']
 
         if config.meteo_type == 'histalp':
             nc_temp = netCDF4.Dataset(config.histalp_temp_file, 'r')
             nc_precip = netCDF4.Dataset(config.histalp_precip_file, 'r')
             self.temp = nc_temp.variables['T_2M']
             self.precip = nc_precip.variables['TOT_PREC']
-            histalp.time_temp = util.num2date(nc_temp.variables['time'])
-            histalp.time_precip = util.num2date(nc_precip.variables['time'])
-            self.dates = sorted(list(set(histalp.time_temp) & set(histalp.time_precip)))
+            reference.time_temp = util.num2date(nc_temp.variables['time'])
+            reference.time_precip = util.num2date(nc_precip.variables['time'])
+            self.dates = sorted(list(set(reference.time_temp) & set(reference.time_precip)))
         else:
             npz = np.load(config.meteo_mapping_file)
             self.mapping_x = npz['mapping_x']
             self.mapping_y = npz['mapping_y']
-
-            npz = np.load(config.meteo_bias_file)
-            self.temp_slope = npz['temp_slope']
-            self.temp_intercept = npz['temp_intercept']
-            self.precip_slope = npz['precip_slope']
-            self.precip_intercept = npz['precip_intercept']
-            self.temp_bias = npz['temp_bias']
+            
+            # get forecast model climatology
+            npz = np.load(config.meteo_mod_climatology_file)
+            self.mod_avg_temp = npz['mean_temp']
+            self.mod_std_temp = npz['std_temp']
+            self.mod_avg_prec = npz['mean_prec']
+            self.mod_std_prec = npz['std_prec']
+            
+            # old bias correction:
+            #npz = np.load(config.meteo_bias_file)
+            #self.temp_slope = npz['temp_slope']
+            #self.temp_intercept = npz['temp_intercept']
+            #self.precip_slope = npz['precip_slope']
+            #self.precip_intercept = npz['precip_intercept']
+            #self.temp_bias = npz['temp_bias']
 
             if config.meteo_type == 'cfs':
                 self.nc = netCDF4.Dataset(config.meteo_file, 'r')
@@ -94,13 +111,14 @@ class Meteo(object):
         prec_var = ncp.variables['pr']
         prec = prec_var[:, :] # precipitation files do not have a time dimension
         ncp.close()
-        return self._meteo_mapping(date, temp, prec, temp_const_bias = True)
+        #return self._meteo_mapping(date, temp, prec, temp_const_bias = True)
+        return self._meteo_mapping_anom(date, temp, prec)
 
     def _get_meteo_histalp(self, date):
         date = pd.Timestamp(date)
 
-        histalp_temp_pos = np.where(pd.to_datetime(self.histalp.time_temp) == date)[0][0]
-        histalp_precip_pos = np.where(pd.to_datetime(self.histalp.time_precip) == date)[0][0]
+        histalp_temp_pos = np.where(pd.to_datetime(self.reference.time_temp) == date)[0][0]
+        histalp_precip_pos = np.where(pd.to_datetime(self.reference.time_precip) == date)[0][0]
         temp_histalp = self.temp[histalp_temp_pos, :, :]
         precip_histalp = self.precip[histalp_precip_pos, :, :]
 
@@ -113,8 +131,23 @@ class Meteo(object):
 
         temp_cfs = self.temp[pos, :, :]
         precip_cfs = self.precip[pos, :, :]
+        #return self._meteo_mapping(date, temp_cfs, precip_cfs)
         return self._meteo_mapping(date, temp_cfs, precip_cfs)
 
+    # new!
+    def _meteo_mapping_anom(self, date, temp, prec):
+        # forecast model to reference
+        mx = self.mapping_x
+        my = self.mapping_y
+
+        mi = date.month - 1
+        num_days_per_month = calendar.monthrange(date.year, date.month)[1]
+        
+        # transform standardized anomalies
+        temp_reference = (temp[my, mx] - 273.15 - self.mod_avg_temp[mi, my, mx]) / self.mod_std_temp[mi, my, mx] * self.ref_std_temp[mi,:,:] + self.ref_avg_temp[mi,:,:]
+        prec_reference = (prec[my, mx] * num_days_per_month * 86400. - self.mod_avg_prec[mi, my, mx]) / self.mod_std_prec[mi, my, mx] * self.ref_std_prec[mi,:,:] + self.ref_avg_prec[mi,:,:]
+
+        return temp_reference, prec_reference
 
     def _meteo_mapping(self, date, temp, precip, temp_const_bias = False):
         mx = self.mapping_x
@@ -137,18 +170,18 @@ class Meteo(object):
 
         return temp_reference, precip_reference
 
-    def _histalp_to_model_grid(self, date, temp_histalp, precip_histalp):
+    def _reference_to_model_grid(self, date, temp_reference, precip_reference):
         temp_lapse_rates = np.zeros(self.dtm.shape) * np.nan
         precip_lapse_rates = np.zeros(self.dtm.shape) * np.nan
         for cid, cpx in self.catchment_pixels.items():
             temp_lapse_rates[cpx] = self.config.params.catchments[cid].temp_lapse_rates[date.month - 1]
             precip_lapse_rates[cpx] = 0.01 * self.config.params.catchments[cid].precip_lapse_rates[date.month - 1]
 
-        mx = self.histalp.mapping_x
-        my = self.histalp.mapping_y
+        mx = self.reference.mapping_x
+        my = self.reference.mapping_y
 
-        temp = temp_histalp[my, mx] + 273.15 - (self.histalp.surface[my, mx] - self.dtm) * temp_lapse_rates
-        precip = precip_histalp[my, mx] - (self.histalp.surface[my, mx] - self.dtm) * precip_histalp[my, mx] * precip_lapse_rates
+        temp = temp_reference[my, mx] + 273.15 - (self.reference.surface[my, mx] - self.dtm) * temp_lapse_rates
+        precip = precip_reference[my, mx] - (self.reference.surface[my, mx] - self.dtm) * precip_reference[my, mx] * precip_lapse_rates
         precip = precip.clip(0.)
 
         return temp, precip
@@ -161,4 +194,4 @@ class Meteo(object):
         elif self.config.meteo_type == 'glosea5':
             temp, precip = self._get_meteo_glosea5(date)
 
-        return self._histalp_to_model_grid(date, temp, precip)
+        return self._reference_to_model_grid(date, temp, precip)
