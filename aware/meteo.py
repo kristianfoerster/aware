@@ -34,6 +34,8 @@ class Meteo(object):
         self.ref_std_temp = npz['std_temp']
         self.ref_avg_prec = npz['mean_prec']
         self.ref_std_prec = npz['std_prec']
+        
+        self.cf = False
 
         if config.meteo_type == 'histalp':
             nc_temp = netCDF4.Dataset(config.histalp_temp_file, 'r')
@@ -43,6 +45,11 @@ class Meteo(object):
             reference.time_temp = util.num2date(nc_temp.variables['time'])
             reference.time_precip = util.num2date(nc_precip.variables['time'])
             self.dates = sorted(list(set(reference.time_temp) & set(reference.time_precip)))
+            
+            if 'meteo_climatological_forecast' in config:
+                self.cf = config.meteo_climatological_forecast
+                if self.cf:
+                    print('Climatological forecast mode activated.')
         else:
             npz = np.load(config.meteo_mapping_file)
             self.mapping_x = npz['mapping_x']
@@ -109,13 +116,20 @@ class Meteo(object):
         # read precipitation
         ncp = netCDF4.Dataset(path_p, 'r')
         prec_var = ncp.variables['pr']
-        prec = prec_var[:, :] # precipitation files do not have a time dimension
+        if len(prec_var.shape) > 2:
+            # this means that a time dimension is defined:
+            prec = prec_var[0,:, :] # precipitation files have a time dimension in seasonal experiment
+        else:
+            prec = prec_var[:, :] # precipitation files do not have a time dimension in horizontalResImpact experiment
         ncp.close()
         #return self._meteo_mapping(date, temp, prec, temp_const_bias = True)
         return self._meteo_mapping_anom(date, temp, prec)
 
     def _get_meteo_histalp(self, date):
         date = pd.Timestamp(date)
+        
+        if self.cf:
+            return self.ref_avg_temp[date.month-1], self.ref_avg_prec[date.month-1]
 
         histalp_temp_pos = np.where(pd.to_datetime(self.reference.time_temp) == date)[0][0]
         histalp_precip_pos = np.where(pd.to_datetime(self.reference.time_precip) == date)[0][0]
@@ -132,7 +146,7 @@ class Meteo(object):
         temp_cfs = self.temp[pos, :, :]
         precip_cfs = self.precip[pos, :, :]
         #return self._meteo_mapping(date, temp_cfs, precip_cfs)
-        return self._meteo_mapping(date, temp_cfs, precip_cfs)
+        return self._meteo_mapping_anom(date, temp_cfs, precip_cfs)
 
     # new!
     def _meteo_mapping_anom(self, date, temp, prec):
@@ -144,7 +158,7 @@ class Meteo(object):
         num_days_per_month = calendar.monthrange(date.year, date.month)[1]
         
         # transform standardized anomalies
-        temp_reference = (temp[my, mx] - 273.15 - self.mod_avg_temp[mi, my, mx]) / self.mod_std_temp[mi, my, mx] * self.ref_std_temp[mi,:,:] + self.ref_avg_temp[mi,:,:]
+        temp_reference = (temp[my, mx] - self.mod_avg_temp[mi, my, mx]) / self.mod_std_temp[mi, my, mx] * self.ref_std_temp[mi,:,:] + self.ref_avg_temp[mi,:,:]
         prec_reference = (prec[my, mx] * num_days_per_month * 86400. - self.mod_avg_prec[mi, my, mx]) / self.mod_std_prec[mi, my, mx] * self.ref_std_prec[mi,:,:] + self.ref_avg_prec[mi,:,:]
 
         return temp_reference, prec_reference

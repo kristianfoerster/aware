@@ -147,7 +147,7 @@ class Aware(object):
                             if dii in self.config.params.catchments[dwid].keys():
                                 catchment_params[cid][dii] = self.config.params.catchments[dwid][dii]
                                 print('    ... overwrite %s' % dii)
-                print(catchment_params[cid]['ddf_ice'])                
+                #print(catchment_params[cid]['ddf_ice'])                
 
         self.config.params.catchments = munch.munchify(catchment_params)
 
