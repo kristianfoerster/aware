@@ -145,9 +145,11 @@ class Aware(object):
                         # catchment_params[cid] += self.config.params.catchments[dwid].items()
                         for dii in default_params.keys():
                             if dii in self.config.params.catchments[dwid].keys():
-                                catchment_params[cid][dii] = self.config.params.catchments[dwid][dii]
-                                print('    ... overwrite %s' % dii)
-                #print(catchment_params[cid]['ddf_ice'])                
+                                param_value = self.config.params.catchments[dwid][dii]
+
+                                if dii not in catchment_params[cid] or catchment_params[cid][dii] != param_value:
+                                    catchment_params[cid][dii] = param_value
+                                    print('    ... overwrite %s' % dii)
 
         self.config.params.catchments = munch.munchify(catchment_params)
 
