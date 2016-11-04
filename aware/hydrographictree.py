@@ -8,7 +8,7 @@ Created on Fri Sep 23 08:15:26 2016
 import numpy as np
 import copy
 
-class HTree:
+class HTree(object):
     '''Hydrographic Tree class for AWARE
     
     HTree represnts the structure of a basin and its sub-catchments. Nodes
