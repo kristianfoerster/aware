@@ -28,18 +28,19 @@ def num2date(ncvar):
 
     # special case for handling "months since" which is not supported by netCDF4-python:
     if 'months since' in ncvar.units:
+        time_vals_i = np.array(time_vals, dtype = int)
         basedate = pd.Timestamp(ncvar.units.split('since')[1])
 
-        # dr = pd.date_range(start=basedate, periods=np.ceil(time_vals.max()) + 1, freq='MS') # caution: "MS" sets the date to the beginning of the month (whereas "M" sets it to the end)!
+        # dr = pd.date_range(start=basedate, periods=np.ceil(time_vals_i.max()) + 1, freq='MS') # caution: "MS" sets the date to the beginning of the month (whereas "M" sets it to the end)!
         # s = pd.Series(dr)
-        s = pd.Series(index=np.floor(time_vals).astype(int)) # take floor because relativedelta can only handle integers
+        s = pd.Series(index=np.floor(time_vals_i).astype(int)) # take floor because relativedelta can only handle integers
         for timediff in s.index:
             s[timediff] = basedate + dateutil.relativedelta.relativedelta(months=timediff)
 
         s = s.apply(lambda t: (t - pd.datetime(1970, 1, 1)).total_seconds()) # convert to seconds
-        s = s.reindex(sorted(list(set(time_vals) | set(s.index)))).interpolate(method='linear')
+        s = s.reindex(sorted(list(set(time_vals_i) | set(s.index)))).interpolate(method='linear')
         s = pd.to_datetime(s, unit='s') 
-        s = s[time_vals]
+        s = s[time_vals_i]
 
         dates = pd.DatetimeIndex(s).to_period('M').to_timestamp('M') # take last day of month as date
         return dates

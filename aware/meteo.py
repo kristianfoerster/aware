@@ -69,7 +69,20 @@ class Meteo(object):
             #self.precip_slope = npz['precip_slope']
             #self.precip_intercept = npz['precip_intercept']
             #self.temp_bias = npz['temp_bias']
-
+            
+            # check for optimum scale parameters
+            #meteo_optimum_scale_active = Tue
+            #meteo_optimum_scale_window = 1
+            #meteo_optimum_scale_shift  = [0,0]
+            if 'meteo_optimum_scale_active' in config:
+                self.optimum_scale_activated = config.meteo_optimum_scale_active
+                self.optimum_scale_window    = config.meteo_optimum_scale_window
+                self.meteo_optimum_scale_shift = config.meteo_optimum_scale_shift
+                print('Optimum scale analysis activated with window size = %i and shift %i in x and %i in y direction.' % \
+                (self.optimum_scale_window, self.meteo_optimum_scale_shift[0],self.meteo_optimum_scale_shift[1]))
+            else:
+                self.optimum_scale_activated = False
+            
             if config.meteo_type == 'cfs':
                 self.nc = netCDF4.Dataset(config.meteo_file, 'r')
                 self.temp = self.nc.variables['TMP_2maboveground']
@@ -123,7 +136,10 @@ class Meteo(object):
             prec = prec_var[:, :] # precipitation files do not have a time dimension in horizontalResImpact experiment
         ncp.close()
         #return self._meteo_mapping(date, temp, prec, temp_const_bias = True)
-        return self._meteo_mapping_anom(date, temp, prec)
+        if self.optimum_scale_activated:
+            return self._meteo_mapping_anom_scale(date, temp, prec, self.optimum_scale_window, self.meteo_optimum_scale_shift)
+        else:
+            return self._meteo_mapping_anom(date, temp, prec)
 
     def _get_meteo_histalp(self, date):
         date = pd.Timestamp(date)
@@ -146,7 +162,12 @@ class Meteo(object):
         temp_cfs = self.temp[pos, :, :]
         precip_cfs = self.precip[pos, :, :]
         #return self._meteo_mapping(date, temp_cfs, precip_cfs)
-        return self._meteo_mapping_anom(date, temp_cfs, precip_cfs)
+        #return self._meteo_mapping_anom(date, temp_cfs, precip_cfs)
+        if self.optimum_scale_activated:
+            return self._meteo_mapping_anom_scale(date, temp_cfs, precip_cfs, self.optimum_scale_window, self.meteo_optimum_scale_shift)
+        else:
+            return self._meteo_mapping_anom(date, temp_cfs, precip_cfs)
+
 
     # new!
     def _meteo_mapping_anom(self, date, temp, prec):
@@ -162,6 +183,37 @@ class Meteo(object):
         prec_reference = (prec[my, mx] * num_days_per_month * 86400. - self.mod_avg_prec[mi, my, mx]) / self.mod_std_prec[mi, my, mx] * self.ref_std_prec[mi,:,:] + self.ref_avg_prec[mi,:,:]
 
         return temp_reference, prec_reference
+
+    def _meteo_mapping_anom_scale(self, date, temp, prec, window_size=1, shift=[0,0]):
+
+        temp_reference = np.zeros(self.ref_avg_temp[0,:,:].shape)
+        prec_reference = np.zeros(self.ref_avg_prec[0,:,:].shape)
+
+        start = -int(window_size/2)
+        stop  = start + window_size
+
+        num_dataframes = 0
+        for si in range(start,stop):
+            for sj in range(start,stop):
+
+                # forecast model to reference
+                # @todo: check boundaries!!!
+                mx = self.mapping_x + si + shift[0]
+                my = self.mapping_y + sj + shift[1]
+        
+                mi = date.month - 1
+                num_days_per_month = calendar.monthrange(date.year, date.month)[1]
+                
+                # transform standardized anomalies
+                temp_reference += (temp[my, mx] - self.mod_avg_temp[mi, my, mx]) / self.mod_std_temp[mi, my, mx] * self.ref_std_temp[mi,:,:] + self.ref_avg_temp[mi,:,:]
+                prec_reference += (prec[my, mx] * num_days_per_month * 86400. - self.mod_avg_prec[mi, my, mx]) / self.mod_std_prec[mi, my, mx] * self.ref_std_prec[mi,:,:] + self.ref_avg_prec[mi,:,:]
+                num_dataframes += 1
+        
+        temp_reference /= num_dataframes
+        prec_reference /= num_dataframes        
+        
+        return temp_reference, prec_reference
+        
 
     def _meteo_mapping(self, date, temp, precip, temp_const_bias = False):
         mx = self.mapping_x
