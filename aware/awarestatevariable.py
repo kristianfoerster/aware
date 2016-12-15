@@ -90,6 +90,8 @@ class AwareStateVariable:
         else:
             infile = filename
         data, prj_settings = util.read_gdal_file(infile, return_prj_settings=True)
+        # force zero assignement for negative values
+        data[data<0] = 0
         self.state = data
         self.projection_settings = prj_settings
         if verbose:

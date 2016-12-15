@@ -495,9 +495,47 @@ class Aware(object):
                     print('Simulation start: %s, loading states from previous current %s' % (ts_start, ts_prev))
         else:
             timestamp = None
-        self.state_swe.import_state(dir, timestamp=timestamp, verbose=verbose)
-        self.state_icewe.import_state(dir, timestamp=timestamp, verbose=verbose)
-        self.state_glacierarea.import_state(dir, timestamp=timestamp, verbose=verbose)
-        self.state_soilmoisture.import_state(dir, timestamp=timestamp, verbose=verbose)
-        self.state_groundwater.import_state(dir, timestamp=timestamp, verbose=verbose)
-        self.is_ready = True
+
+        # $kf 2016-12-14: improved error handling for import functions
+        n_errors = 0
+        list_failed = []
+        
+        try:
+            self.state_swe.import_state(dir, timestamp=timestamp, verbose=verbose)
+        except:
+            n_errors += 1
+            list_failed.append('SWE')
+            
+        try:
+            self.state_icewe.import_state(dir, timestamp=timestamp, verbose=verbose)
+        except:
+            n_errors += 1
+            list_failed.append('SWE ice')
+            
+        try:
+            self.state_glacierarea.import_state(dir, timestamp=timestamp, verbose=verbose)
+        except:
+            n_errors += 1
+            list_failed.append('Glacier area')
+            
+        try:
+            self.state_soilmoisture.import_state(dir, timestamp=timestamp, verbose=verbose)
+        except:
+            n_errors += 1
+            list_failed.append('Soil moisture')
+            
+        try:
+            self.state_groundwater.import_state(dir, timestamp=timestamp, verbose=verbose)            
+        except:
+            n_errors += 1
+            list_failed.append('Groundwater storage')
+            
+        if n_errors < 5:
+            self.is_ready = True
+        else:
+            print('Error: Loading state variables failed.')
+        if n_errors > 0 and self.is_ready:
+            print('At least one state variable could not be loaded from file.')
+            print('Please check the availability of the following state variables:')
+            for var in list_failed:
+                print(var)
