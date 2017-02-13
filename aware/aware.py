@@ -96,6 +96,9 @@ class Aware(object):
                 tree = ti.get_tree_by_id(cid)
                 if tree is not None:
                     break
+            # name of catchment
+            self.catchments[cid].name = tree.name
+
             # get tributaries
             ids, areas = tree.get_upstream_areas()
             self.catchments[cid].upstream_ids = np.array(ids)
@@ -106,9 +109,11 @@ class Aware(object):
             self.catchments[cid].area = 1. - np.sum(self.catchments[cid].upstream_areas)
             # computation order
             self.catchments[cid].priority = tree.order
+            # absolute area
+            self.catchments[cid].abs_area = tree.area
             
             self.catchments[cid].next = tree.downstream_node
-            
+                                       
             # downstream path to outlet (for assigment of parameters)
             self.catchments[cid].downstream_path = self.hydrographictree[subtree_id].get_downstream_path(cid)
             
@@ -141,7 +146,7 @@ class Aware(object):
                 # assign downstream parameters if relevant                
                 for dwid in self.catchments[cid].downstream_path[::-1]:
                     if dwid in self.config.params.catchments.keys():
-                        print('[%02i] apply parameters from area %02i...' % (cid,dwid))
+                        print('[%02i] apply parameters from area (%02i)...' % (cid,dwid))
                         # catchment_params[cid] += self.config.params.catchments[dwid].items()
                         for dii in default_params.keys():
                             if dii in self.config.params.catchments[dwid].keys():
@@ -501,31 +506,31 @@ class Aware(object):
         list_failed = []
         
         try:
-            self.state_swe.import_state(dir, timestamp=timestamp, verbose=verbose)
+            self.state_swe.import_state(dir, timestamp=timestamp, verbose=verbose, basin=self.input_grids.catchments)
         except:
             n_errors += 1
             list_failed.append('SWE')
             
         try:
-            self.state_icewe.import_state(dir, timestamp=timestamp, verbose=verbose)
+            self.state_icewe.import_state(dir, timestamp=timestamp, verbose=verbose, basin=self.input_grids.catchments)
         except:
             n_errors += 1
             list_failed.append('SWE ice')
             
         try:
-            self.state_glacierarea.import_state(dir, timestamp=timestamp, verbose=verbose)
+            self.state_glacierarea.import_state(dir, timestamp=timestamp, verbose=verbose, basin=self.input_grids.catchments)
         except:
             n_errors += 1
             list_failed.append('Glacier area')
             
         try:
-            self.state_soilmoisture.import_state(dir, timestamp=timestamp, verbose=verbose)
+            self.state_soilmoisture.import_state(dir, timestamp=timestamp, verbose=verbose, basin=self.input_grids.catchments)
         except:
             n_errors += 1
             list_failed.append('Soil moisture')
             
         try:
-            self.state_groundwater.import_state(dir, timestamp=timestamp, verbose=verbose)            
+            self.state_groundwater.import_state(dir, timestamp=timestamp, verbose=verbose, basin=self.input_grids.catchments)            
         except:
             n_errors += 1
             list_failed.append('Groundwater storage')
@@ -539,3 +544,12 @@ class Aware(object):
             print('Please check the availability of the following state variables:')
             for var in list_failed:
                 print(var)
+
+    def get_catchment_info(self):
+        df = pd.DataFrame(columns=['name','area','next'], index=self.catchment_ids)
+        df['name'] = df['name'].astype(str)
+        for ii in self.catchment_ids:
+            df.loc[ii]['name'] = self.catchments[ii].name
+            df.loc[ii]['area'] = self.catchments[ii].abs_area
+            df.loc[ii]['next'] = self.catchments[ii].next
+        return df

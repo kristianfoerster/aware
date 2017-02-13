@@ -74,7 +74,7 @@ class AwareStateVariable:
         else:
             self.state = data
     
-    def import_state(self, filename, timestamp=None, verbose=False):
+    def import_state(self, filename, timestamp=None, verbose=False, basin=None):
         '''Read system state from file.
         
         Parameters
@@ -94,6 +94,13 @@ class AwareStateVariable:
         data[data<0] = 0
         self.state = data
         self.projection_settings = prj_settings
+        if basin is not None:
+            i_data_basin = basin>0
+            i_invalid = np.isnan(data) & i_data_basin
+            n_invalid = i_invalid.sum()
+            if n_invalid > 0:
+                print('%i invalid cells detected. Set to zero!' % n_invalid)
+                data[i_invalid] = 0
         if verbose:
             print('State variable %s updated from file %s.' % (self.name, infile))
                 
