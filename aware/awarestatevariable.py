@@ -89,6 +89,8 @@ class AwareStateVariable:
             infile = os.path.join(filename, self.get_state_filename(timestamp))
         else:
             infile = filename
+        if not os.path.isfile(infile):
+            raise "File not found error <%s>" % infile
         data, prj_settings = util.read_gdal_file(infile, return_prj_settings=True)
         # force zero assignement for negative values
         data[data<0] = 0
