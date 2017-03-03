@@ -62,8 +62,9 @@ AWARE assumes that groundwater can be simply represented by a linear storage. Th
 ### Runoff
 Runoff is computed by superposing direct runoff from the soil model and the groundwater recession computed by the groundwater model. It is assumed that the time of concentration is smaller than the model time step of one month which is why a routing description is not available (yet). For Alpine catchments, this simplification is assumed to be feasible.
 
+
 ### Model Parameters
-This a list of parameters that need to be specified in order to run the model. For each parameter an example is provied.
+This a list of parameters that need to be specified in order to run the model. For each parameter an example is provided. This list of parameters in terms of Python code that can be simply inserted in the control file of the model (see explanations below).
 
 ```python
 params = dict(
@@ -71,27 +72,36 @@ params = dict(
         latitude = 47.,
         temp_lapse_rates   = [-0.0026, -0.0035, -0.0047, -0.0053, -0.0052, -0.0053, -0.0049, -0.0047, -0.0042, -0.0033, -0.0035, -0.0031], # temperature increase in C/m
         precip_lapse_rates = [0.042] * 12, # precipitation increase rates in %/m
-        ddf_snow         = 85.0,   # degree-day factor for snow
-        ddf_ice          = 270.0,       # degree-day factor for ice
-        melt_temp        = 273.15,   # melt temperature
-        trans_temp       = 273.15,   # temperature separating rain and snow
+        ddf_snow         = 85.0,     # degree-day factor for snow [mm/month/K]
+        ddf_ice          = 270.0,    # degree-day factor for ice [mm/month/K]
+        melt_temp        = 273.15,   # melt temperature [K]
+        trans_temp       = 273.15,   # temperature separating rain and snow [K]
         temp_trans_range = 1.,       # temperature mixed phase transition range
         gw_n             = 0.2,      # fraction of water that infiltrates into the groundwater storage (if no soil model is applied)
-        gw_k             = 7.0,      # groundwater recession constant
-        gw_storage_init  = 150.,
-        soil_capacity    = 250,       # maximum soil moisture capacity of the soil
-        psi              = 0.19,     # runoff coefficient (fraction of runoff that is transformed to direct runoff)
-        percolation_f    = 0.4,      # fraction of soil moisture surplus that infiltrates into the groundwater storage
-        percolation_r    = 0.2,      # fraction of soil moisture that is subjected to percolation
-        sms_init         = 90.,
-        et_j             = 16.819,
-        factor_etp_summer= 1.0,
-        rain_corr        = 1.05,
-        snow_corr        = 1.10,
+        gw_k             = 7.0,      # groundwater recession constant [months]
+        gw_storage_init  = 150.,     # initial condition of the groundwater storage [mm]
+        soil_capacity    = 250,      # maximum soil moisture capacity of the soil [mm]
+        psi              = 0.19,     # runoff coefficient (fraction of runoff that is transformed to direct runoff) [-]
+        percolation_f    = 0.4,      # fraction of soil moisture surplus that infiltrates into the groundwater storage [-]
+        percolation_r    = 0.2,      # fraction of soil moisture that is subjected to percolation [-]
+        sms_init         = 90.,      # initial condition for the soil moisture storage [mm]
+        et_j             = 16.819,   # parameter j in the Thornthwaite model (can be achieved throug preprocessing)
+        factor_etp_summer= 1.0,      # ETP correction factor [-]
+        rain_corr        = 1.05,     # liquid precipitation undercatch correction [mm]
+        snow_corr        = 1.10,     # solid precipitation undercatch correction [mm]
     ),
     catchments={},
 )
 ```
+
+In order to correctly predict potential evapotranspiration, the latitude parameter needs to be adjusted in any case. The parameter *j*, which represents a heat index in the Thornthwaite (1948) model, can be computed using a function provided by the evapotranspiration model:
+
+```python
+from aware.models import evapotranspiration
+j = evapotranspiration.EvapotranspirationModel.compute_parameter_j(data)
+```
+
+This minimal example assumes that `data` includes monthly time series of temperature.
 
 ## References
 Auer, I., Böhm, R., Jurkovic, A., Lipa, W., Orlik, A., Potzmann, R., Schöner, W., Ungersböck, M., Matulla, C., Briffa, K., Jones, P., Efthymi- adis, D., Brunetti, M., Nanni, T., Maugeri, M., Mercalli, L., Mestre, O., Moisselin, J.-M., Begert, M., Müller-Westermeier, G., Kveton, V., Bochnicek, O., Stastny, P., Lapin, M., Szalai, S., Szentimrey, T., Cegnar, T., Dolinar, M., Gajic-Capka, M., Zaninovic, K., Majstorovic, Z., and Nieplova, E.: HISTALP—historical instrumental climatological surface time series of the Greater Alpine Region, *Int. J. Climatol.*, 27, 17–46, [doi:10.1002/joc.1377](http://dx.doi.org/10.1002/joc.1377), 2007.
