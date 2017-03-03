@@ -11,23 +11,26 @@ import copy
 class HTree(object):
     '''Hydrographic Tree class for AWARE
     
-    HTree represnts the structure of a basin and its sub-catchments. Nodes
+    HTree represents the structure of a basin and its sub-catchments. Nodes
     represent sub-catchments and segements (i.e. the way how these nodes are
-    connected) can be viewed as rivers. The class and its methods provides
+    connected) can be viewed as rivers. The class and its methods provide
     the most important features to generate a dendritic structure of sub-
     catchments and the correct interlinkage of tributaries. This helps in
     assigning model parameters and evaluating results in hydrologic modelling.
     A hydrographic tree can be generated through analyses of digital elevation
     models.
     '''    
-    def __init__(self, id=0, tributaries=None):
+    def __init__(self, id=0, name=None, tributaries=None):
         self.id = id
+        self.name = name
         self.order=0
         self.level=0
         self.area = 0
         self.subarea = 0
         self.tributaries = []
         self.downstream_node = None
+        self.b_reached = False
+        self.temp_point_to = None
         if tributaries is not None:
             for tributary in tributaries:
                 tributary.downstream_node = self.id
@@ -165,14 +168,14 @@ class HTree(object):
     def calculate_sub_areas(self):
         '''The area of the sub-catchment upstream of each node is calculated
         taking it into account that delineated upstream areas are defined
-        seprately (i.e., only the are betwenn two nodes is returned).
+        seprately (i.e., only the area between two nodes is returned).
 
         Returns:
         upstream area that is represented by other nodes
         '''
         if len(self.tributaries) == 0:
-            self.subarea = self.area
-        defined_areas = self.area
+            self.subarea = self.get_total_area()
+        defined_areas = self.get_total_area()
         for i,tributary in enumerate(self.tributaries):
             defined_areas -= tributary.calculate_sub_areas()
         self.subarea = defined_areas
@@ -301,7 +304,7 @@ class HTree(object):
         
         Parameters
         ----
-        id: id which represents the sart node
+        id: id which represents the start node
 
         Returns
         ----    
@@ -314,3 +317,81 @@ class HTree(object):
         else:
             return [id]
         
+    def insert_between(self, lower_id, upper_id, suggested_id=1, name=None, area=0, node_type = 'standard', b_target=None):
+        lower = self.get_tree_by_id(lower_id)
+        if lower.tributaries is not None:
+            b_rem = False
+            new_tributary = None
+            for i,tributary in enumerate(lower.tributaries):
+                if tributary.id == upper_id:
+                    new_id = lower.add_new_tributary_id(suggested_id)
+                    # new_tributary=HTree(id=new_id, name=name)
+                    new_tributary = HTree.new_instance(new_id=new_id, new_name=name, node_type_in=node_type, b_target=b_target)
+                    if area > 0:
+                        new_tributary.area = area
+                    else:
+                        new_tributary.area = tributary.area
+                    new_tributary.add_tributary(tributary)
+                    lower.add_tributary(new_tributary)
+                    b_rem = True
+                    break
+            if b_rem:
+                lower.tributaries.pop(i)
+                if isinstance(new_tributary, HTreeBifurcation):
+                    target_node = self.get_tree_by_id(b_target)
+                    if target_node is not None:
+                        target_node.add_tributary(new_tributary)
+
+                self.postprocess_tree()
+                #lowermost_id = self.get_downstream_path(self.id)
+                #print(lowermost_id)
+                #lowermost = self.get_tree_by_id(lowermost_id)
+                #lowermost.postprocess_tree()
+                return new_tributary
+            else:
+                return None
+        else:
+            return None
+
+    def calculate(self, inflow):
+        return inflow
+    
+    def get_total_area(self):
+        return self.area
+    
+    STR_HTREE_STD       = 'standard'
+    STR_RESERVOIR_CONST = 'reservoir_const'
+    STR_BIFURCATION     = 'bifurcation'
+    
+    @staticmethod
+    def new_instance(new_id, new_name=None, node_type_in=STR_HTREE_STD, b_target=None):
+        node_type = node_type_in.lower()
+        if node_type == HTree.STR_HTREE_STD or node_type == 'htree':
+            return HTree(id=new_id, name=new_name)
+        elif node_type == HTree.STR_RESERVOIR_CONST:
+            return HTreeReservoirConst(id=new_id, name=new_name)
+        elif node_type == HTree.STR_BIFURCATION:
+            bifurcation = HTreeBifurcation(id=new_id, name=new_name)
+            bifurcation.set_target(b_target)
+            return bifurcation
+
+
+class HTreeReservoir(HTree):    
+    def calculate(self, inflow):
+        return inflow
+
+class HTreeReservoirConst(HTreeReservoir):
+    const_outflow = 0
+    capacity      = 0    
+    def calculate(self, inflow):
+        return inflow
+
+class HTreeBifurcation(HTree):
+    n_withdrawal = 0
+    def calculate(self, inflow):
+        return (1 - self.n_withdrawal) * inflow
+    def calc_withdrawal(self, inflow):
+        return self.n_withdrawal * inflow
+    def set_target(self, target):
+        self.target = target
+    
