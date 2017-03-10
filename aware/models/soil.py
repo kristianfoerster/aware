@@ -5,6 +5,9 @@ class SoilModel(object):
     """The SoilModel class represents a minimal soil model. It is based on
     previous work dedicated to the Thornthwaite water balance model (see, e.g.,
     McCabe and Markstrom, 2007, Raleigh and others).
+    The model code is based on a MATLAB implementation of the McCabe and
+    Markstrom approach written by Mark Stephen Raleigh who has kindly
+    permitted us to use this model code.
     """
 
     def __init__(self):
