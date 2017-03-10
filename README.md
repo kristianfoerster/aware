@@ -103,6 +103,9 @@ j = evapotranspiration.EvapotranspirationModel.compute_parameter_j(data)
 
 This minimal example assumes that `data` includes monthly time series of temperature.
 
+## Acknowledgements
+The soil model is adopted from a MATLAB implementation of the McCabe and Markstrom approach written by Mark Stephen Raleigh who has kindly permitted us to use this model code.
+
 ## References
 Auer, I., Böhm, R., Jurkovic, A., Lipa, W., Orlik, A., Potzmann, R., Schöner, W., Ungersböck, M., Matulla, C., Briffa, K., Jones, P., Efthymi- adis, D., Brunetti, M., Nanni, T., Maugeri, M., Mercalli, L., Mestre, O., Moisselin, J.-M., Begert, M., Müller-Westermeier, G., Kveton, V., Bochnicek, O., Stastny, P., Lapin, M., Szalai, S., Szentimrey, T., Cegnar, T., Dolinar, M., Gajic-Capka, M., Zaninovic, K., Majstorovic, Z., and Nieplova, E.: HISTALP—historical instrumental climatological surface time series of the Greater Alpine Region, *Int. J. Climatol.*, 27, 17–46, [doi:10.1002/joc.1377](http://dx.doi.org/10.1002/joc.1377), 2007.
 
