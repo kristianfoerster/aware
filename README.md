@@ -103,6 +103,52 @@ j = evapotranspiration.EvapotranspirationModel.compute_parameter_j(data)
 
 This minimal example assumes that `data` includes monthly time series of temperature.
 
+For each catchment, separate parameters can be defined. The default behaviour of parameter assignment imposes standard parameters for all sub-areas. If a downstream catchment has own parameters, these parameters propagate upstream, i.e., each catchment looks up its parameters, if these are not available, downstream parameters are collected or default parameters are assigned if there aren't any parameters defined on sub-catchment level. The following lines demonstrate how this paradigm of parameter assignment works:
+
+```python
+# parameters
+params = dict(
+    default=dict(
+        latitude = 47.,
+        temp_lapse_rates   = [-0.0026, -0.0035, -0.0047, -0.0053, -0.0052, -0.0053, -0.0049, -0.0047, -0.0042, -0.0033, -0.0035, -0.0031], # temperature increase in C/m
+        precip_lapse_rates = [0.042] * 12, # precipitation increase rates in %/m
+        ddf_snow         = 90.0,   # degree-day factor for snow
+        ddf_ice          = 270.0,       # degree-day factor for ice
+        melt_temp        = 273.15,   # melt temperature
+        trans_temp  = 273.15,   # temperature separating rain and snow
+        temp_trans_range = 1.,       # temperature mixed phase transition range
+        gw_n             = 0.2,      # fraction of water that infiltrates into the groundwater storage (if no soil model is applied)
+        gw_k             = 4.9,      # groundwater recession constant
+        gw_storage_init  = 150.,
+        soil_capacity    = 250,       # maximum soil moisture capacity of the soil
+        psi              = 0.19,     # runoff coefficient (fraction of runoff that is transformed to direct runoff)
+        percolation_f    = 0.4,      # fraction of soil moisture surplus that infiltrates into the groundwater storage
+        percolation_r    = 0.2,      # fraction of soil moisture that is subjected to percolation
+        sms_init         = 90.,
+        et_j             = 16.819,
+        factor_etp_summer= 0.7,
+        rain_corr        = 1.,
+        snow_corr        = 1.,
+    ),
+
+    catchments={
+        2: dict(
+            sms_init = 100.,
+        ),
+        3: dict(
+            sms_init = 120.,
+        ),
+        4: dict(
+            ddf_ice=77,
+            et_j = 17.2,
+        ),
+    },
+)
+
+```
+
+In this example, catchment #2 will be initialised with another initial soil moisture storage value. The same holds true for catchment #3. Suppose that catchment #4 is a tributary of catchment #3. In this case, the melt rate for glaciers and the evapotranspiration parameter of catchment #4 are applied as defined. The soil moisture of catchment #3 is also assigned to catchment #4 because the latter is a tributary of the former. All other values are set using the default definitions.
+
 ## Acknowledgements
 The soil model is adopted from a MATLAB implementation of the McCabe and Markstrom approach written by Mark Stephen Raleigh who has kindly permitted us to use this model code.
 
