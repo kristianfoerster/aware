@@ -147,7 +147,63 @@ params = dict(
 
 ```
 
-In this example, catchment #2 will be initialised with another initial soil moisture storage value. The same holds true for catchment #3. Suppose that catchment #4 is a tributary of catchment #3. In this case, the melt rate for glaciers and the evapotranspiration parameter of catchment #4 are applied as defined. The soil moisture of catchment #3 is also assigned to catchment #4 because the latter is a tributary of the former. All other values are set using the default definitions.
+In this example, catchment #2 will be initialised with another initial soil moisture storage value. The same holds true for catchment #3 but using a different value. Suppose that catchment #4 is a tributary of catchment #3. In this case, the melt rate for glaciers and the evapotranspiration parameter of catchment #4 are applied as defined for this catchment. The soil moisture of catchment #3 is also assigned to catchment #4 because the latter is a tributary of the former. All other values are set using the default definitions. This paradigm of parameter assignment is suitable for calibrating the model from the head catchments downwards to the basin's outlet.
+
+## General parameters
+The model config file, which includes all relevant information to perform simulations, requires defining model settings and model parameters. The latter is explained in the model description section. The config file includes path definitions of input files and information required to perform simulations:
+
+
+```python
+
+# input
+dtm_file = 'data/filled_dtm_tirol_1k.tif'
+catchments_file = 'data/catchments_tirol_1k.tif'
+glaciers_file = 'data/glaciers2003_tirol_1k.tif'
+hydrographictree_file = 'data/treelist.dump'
+
+# output
+out_dir = 'output/'
+
+# time
+start_date = '1995-01'
+end_date = '2009-12'
+
+meteo_type = 'histalp'
+reference_dtm_file = 'data/HISTALP_temperature_1780-2014_inn.nc'
+reference_mapping_file = 'data/histalp_mapping.npz'
+forecasts/2015-10/flxf.01.2015100100.nc'
+meteo_file = 'Amon_GloSea5_horizlResImpact_S19961101_r1i1p1'
+meteo_path = '/Users/kristianf/projekte/MUSICALS/Daten/UKMO'
+histalp_temp_file = 'data/histalp2016/HISTALP_temperature_1780-2014_inn.nc'
+HISTALP_temperature_1780-2008_inn.nc'
+histalp_precip_file = 'data/HISTALP_precipitation_all_abs_1801-2010_inn.nc'
+HISTALP_precipitation_all_abs_1801-2014_inn.nc'
+era_interim_nc = '/Users/kristianf/projekte/diverse_prj/era_interim_climatology/era_interim_monthly.nc'
+meteo_mapping_file = 'data/glosea_mapping.npz'
+meteo_bias_file = 'data/glosea_bias.npz'
+meteo_ref_climatology_file = 'data/climatology_histalp_1996-2008.npz'
+meteo_climatological_forecast = False
+
+# sub models
+enable_soil_model = True
+
+# export settings for state variables
+write_dates = []
+```
+
+Input files (GeoTiff format):
+* `dtm_file`: A filled digital terrain model of the entire basin
+* `catchments_file`: A map showing unique ids of sub-catchments
+* `glaciers_file`: Each cell value represents the fraction covered by glaciers. If there aren't any glaciers in the study area, this map can be simply set to zero.
+
+`output_dir` is a path in which all results will be written.
+
+
+## Preprocessing
+
+## Starting the model
+
+## A first look on the results
 
 ## Acknowledgements
 The soil model is adopted from a MATLAB implementation of the McCabe and Markstrom approach written by Mark Stephen Raleigh who has kindly permitted us to use this model code.
