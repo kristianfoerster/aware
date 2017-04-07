@@ -40,26 +40,33 @@ def get_time_index(list_ts, date):
 
 # select meteo input
 meteo_inp_type = 'cfs'
+#meteo_inp_type = 'glosea_horizontalResolution'
 #meteo_inp_type = 'glosea'
 #meteo_inp_type = 'histalp'
 
 # files input
-path_histalp_prec = '/Users/kristianf/projekte/MUSICALS/Daten/histalp/HISTALP_precipitation_all_abs_1801-2010_inn.nc'
-path_histalp_temp = '/Users/kristianf/projekte/MUSICALS/Daten/histalp/HISTALP_temperature_1780-2008_inn.nc'
+path_histalp_prec = '/Users/kristianf/projekte/MUSICALS/AWARE/awaretestdata/data/HISTALP_precipitation_all_abs_1801-2010_inn.nc'
+#path_histalp_temp = '/Users/kristianf/projekte/MUSICALS/Daten/histalp/HISTALP_temperature_1780-2008_inn.nc'
+path_histalp_temp = '/Users/kristianf/projekte/MUSICALS/AWARE/awaretestdata/data/histalp2016/HISTALP_temperature_1780-2014_inn.nc'
 
 if meteo_inp_type == 'cfs':
     path_input = '/Users/kristianf/projekte/MUSICALS/CFS/reforecasts/'
     model_mapping_file = '/Users/kristianf/projekte/MUSICALS/AWARE/awaretestdata/data/cfs_mapping.npz'
     year1 = 1992 # start glosea
-    year2 = 2008 # last year histalp
+    year2 = 2009 # last year histalp
+if meteo_inp_type == 'glosea_horizontalResolution':
+    year1 = 1996 # start glosea
+    year2 = 2009 # last year histalp # use 2008 in order exclude winter 2009/10
+    path_input = '/Users/kristianf/projekte/MUSICALS/Daten/UKMO/'
+    model_mapping_file = '/Users/kristianf/projekte/MUSICALS/AWARE/awaretestdata/data/glosea_mapping_horizontalResolution_Exp.npz'
 if meteo_inp_type == 'glosea':
     year1 = 1992 # start glosea
-    year2 = 2008 # last year histalp
+    year2 = 2009 # last year histalp # use 2008 in order exclude winter 2009/10
     path_input = '/Users/kristianf/projekte/MUSICALS/Daten/UKMO_seasonal/'
     model_mapping_file = '/Users/kristianf/projekte/MUSICALS/AWARE/awaretestdata/data/glosea_mapping.npz'
 if meteo_inp_type == 'histalp':
     year1 = 1992 # start glosea
-    year2 = 2008 # last year histalp
+    year2 = 2009 # last year histalp
 
 
 basedir = '/Users/kristianf/projekte/MUSICALS/AWARE/awaretestdata/data/'
@@ -101,10 +108,15 @@ if  meteo_inp_type == 'cfs':
                 di += datetime.timedelta(5)
     first_file = list_file[0]
 
-elif meteo_inp_type == 'glosea':
+elif meteo_inp_type == 'glosea_horizontalResolution' or meteo_inp_type == 'glosea' :
     field_temp = 'tas'
     field_prec = 'pr'
-    n_real = 8
+    if meteo_inp_type == 'glosea_horizontalResolution':
+        n_real = 3
+        file_id = 'horizlResImpact'
+    else:
+        n_real = 8
+        file_id = 'seasonal'
     #skip_months = [1,2,3,4,5,6,7,8,9,10,12]
     # months to be evaluated:
     #m = [1,2,11,12] # [5,11]
@@ -114,7 +126,7 @@ elif meteo_inp_type == 'glosea':
     #for mii in all_months:
     #    if mii not in m:
     #        skip_months.append(mii)
-    for ii in range(year1,year2+1):
+    for ii in range(year1,year2):
         for jj in m_start:
             for ll in range(0,4):
                 month = jj + ll
@@ -123,19 +135,19 @@ elif meteo_inp_type == 'glosea':
                     month -= 12
                     year += 1
                 for kk in range(0,n_real):
-                    string0 = 'Amon_GloSea5_seasonal_S%4i%02i25_r%ii1p1_%4i%02i-%4i%02i.nc' % \
-                        (ii,(jj-1),(kk+1),year,month,year,month)
+                    string0 = 'Amon_GloSea5_%s_S%4i%02i25_r%ii1p1_%4i%02i-%4i%02i.nc' % \
+                        (file_id,ii,(jj-1),(kk+1),year,month,year,month)
                     list_file.append(string0)
                     list_days_per_month.append(calendar.monthrange(ii, jj)[1])
                     list_month.append(month)
-                    string1 = 'Amon_GloSea5_seasonal_S%4i%02i01_r%ii1p1_%4i%02i-%4i%02i.nc' % \
-                        (ii,jj,(kk+1),year,month,year,month)
+                    string1 = 'Amon_GloSea5_%s_S%4i%02i01_r%ii1p1_%4i%02i-%4i%02i.nc' % \
+                        (file_id,ii,jj,(kk+1),year,month,year,month)
                     list_file.append(string1)
                     list_days_per_month.append(calendar.monthrange(year, month)[1])
                     list_month.append(month)
                     if ll > 0:
-                        string2 = 'Amon_GloSea5_seasonal_S%4i%02i09_r%ii1p1_%4i%02i-%4i%02i.nc' % \
-                            (ii,jj,(kk+1),year,month,year,month)
+                        string2 = 'Amon_GloSea5_%s_S%4i%02i09_r%ii1p1_%4i%02i-%4i%02i.nc' % \
+                            (file_id,ii,jj,(kk+1),year,month,year,month)
                         list_file.append(string2)
                         list_days_per_month.append(calendar.monthrange(year, month)[1])
                         list_month.append(month)
@@ -192,13 +204,13 @@ else:
                 temp_grid = read_nc_file(fi,field_temp)      
                 prec_grid = read_nc_file(fi,field_prec)
                 print(fi)
-            elif meteo_inp_type == 'glosea':
+            elif meteo_inp_type == 'glosea_horizontalResolution' or meteo_inp_type == 'glosea':
                 path_tfile = '%stas_%s' % (path_input, fi)
                 path_pfile = '%spr_%s' % (path_input, fi)
                 print(path_tfile)
                 temp_grid = read_nc_file(path_tfile,field_temp)
                 print(path_pfile)
-                prec_grid = read_nc_file(path_pfile,field_prec)
+                prec_grid = read_nc_file(path_pfile,field_prec, no_time_dim=True)
                 
     
             stack_T[t,:,:] = temp_grid
