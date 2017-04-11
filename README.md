@@ -149,6 +149,15 @@ params = dict(
 
 In this example, catchment #2 will be initialised with another initial soil moisture storage value. The same holds true for catchment #3 but using a different value. Suppose that catchment #4 is a tributary of catchment #3. In this case, the melt rate for glaciers and the evapotranspiration parameter of catchment #4 are applied as defined for this catchment. The soil moisture of catchment #3 is also assigned to catchment #4 because the latter is a tributary of the former. All other values are set using the default definitions. This paradigm of parameter assignment is suitable for calibrating the model from the head catchments downwards to the basin's outlet.
 
+### Remarks on parameter sensitivity
+The selection of valid parameter values is subject to a model calibration procedure. This can be done through trial and error modifications of parameter values or optimisation algorithms. Here, a simple Monte Carlo modelling experiment has been performed with *n* = 1000 single runs for which the parameters have been generated using a latin hypercube sampled. For the Inn headwaters catchment, a benachmark Nash Sutcliffe threshold value of 0.25 has been chosen in order to split the sample in *behavioural*, which have a better model skill than the pre-defined threshold, and *non-behavioural* simulations with lower model skill. This experiment is shown in Fig. 2:
+
+![Sensitivity analysis](./images/aware_sens.png)
+
+*Fig. 2: General sensitivity analysis for six selected parameters of AWARE. Grey dots indicate non-behavioural and blue dots represent behavioural runs, respectively.*
+
+This experiment is known as general sensitivity analysis and follows the ideas of Spear and Hornberger (1980) and Tang et al. (2007). Non-behavioural simulations do not show any sensitivity regarding parameter modifications. For this reason, the cumulative density functions (cdf) computed for the full set of these runs reflects a straight line in the parameter space. In contrast, behavioural runs can be attributed to certain ranges of parameters. The cdfs markably differ from the straight line (equal distribution). The parameter range subjected to the highest slope of the cdf indicate which values might be suitable for each parameter. For instance, simulations parameterised with `ddf_snow` values between 60 and 100 yield 80% of the behavioural runs indicating that this range is suitable. Similarly, ~0.3 is a good choice for `psi`. The effect of modifying the other parameters is less pronounced. However, even for `ddf_ice`, `percolation_f` and `gw_k` helpful estimations are possible on this basis. The model seems to be less sensitive regarding modifications of`percolation_r`. Please note that these findings are only valid for one specific case study and might not be directly transferrable in any case due to the empirical and conceptual nature of the model.
+
 ## General parameters
 The model config file, which includes all relevant information to perform simulations, requires defining model settings and model parameters. The latter is explained in the model description section. The config file includes path definitions of input files and information required to perform simulations:
 
@@ -221,7 +230,11 @@ Marzeion, B., Jarosch, A. H., and Hofer, M.: Past and future sea-level change fr
 
 McCabe, G. J. and Markstrom, S. L.: A Monthly Water-Balance Model Driven By a Graphical User Interface, *U.S. Geological Survey Open-File report*, [https://pubs.usgs.gov/of/2007/1088/](https://pubs.usgs.gov/of/2007/1088/), accessed on 22 Feb 2017, 2007.
 
-Rango, A. and Martinec, J.: Revisting the degree-day method for snowmelt computations, *J. Am. Water Resour. Assoc.*, 31, 657– 669, [doi:doi:10.1111/j.1752-1688.1995.tb03392.x](http://dx.doi.org/doi:10.1111/j.1752-1688.1995.tb03392.x), 1995.
+Rango, A. and Martinec, J.: Revisting the degree-day method for snowmelt computations, *J. Am. Water Resour. Assoc.*, 31, 657– 669, [doi:10.1111/j.1752-1688.1995.tb03392.x](http://dx.doi.org/10.1111/j.1752-1688.1995.tb03392.x), 1995.
+
+Spear, R. C. and Hornberger, G. M.: Eutrophication in Peel Inlet - II. Identification of critical uncertainties via generalized sensitivity analysis, *Water Res.*, 14(1), 43–49, 1980.
+
+Tang, Y., Reed, P., Wagener, T. and van Werkhoven, K.: Comparing sensitivity analysis methods to advance lumped watershed model identification and evaluation, *Hydrol. Earth Syst. Sci.*, 11(2), 793–817, [doi:10.5194/hess-11-793-2007](http://dx.doi.org/10.5194/hess-11-793-2007), 2007.
 
 Thornthwaite, C. W.: An Approach toward a Rational Classification of Climate, *Geogr. Rev.*, 38, 55–94, [doi:10.2307/210739](http://dx.doi.org/10.2307/210739), 1948.
 
