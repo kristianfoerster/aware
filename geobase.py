@@ -328,6 +328,7 @@ p24 = Point('Sanna', 80, 71)
 p25 = Point('Martina', 112, 62)
 
 list_pp = [p16,p6,p8,p3,p17,p5,p4,p7,p18,p2,p9,p10,p11,p15,p12,p13,p19,p14,p20,p21,p22,p23,p24,p25]
+# list_pp = [p2]
 # warum geht p6 nicht?
 
 # sort list according to flow accumulation
@@ -368,4 +369,10 @@ plt.colorbar()
 plt.savefig('/tmp/sub-catchments.pdf')
 plt.show()
 
-os.system('python /Users/kristianf/projekte/MUSICALS/AWARE/treevis.py')
+
+#%%
+with rasterio.drivers():
+    with rasterio.open('/tmp/basin.tif', 'w', **ds.meta) as dst_ds:
+        dst_ds.write_band(1, basin.astype(np.float32))
+
+os.system('python /Users/kristianfoerster/projekte/MUSICALS/AWARE/treevis.py')
