@@ -11,6 +11,7 @@ import copy
 import os
 import dateutil
 import pickle
+import xarray as xr
 
 class Aware(object):
     '''This class represents the Alpine WAter balance and Runoff Estimation model
@@ -401,7 +402,8 @@ class Aware(object):
                 self.write_states(add_timestamp = True, verbose=True)
 
         results = munch.Munch()
-        results.ts = pd.Panel(rts_catchments)
+        variables = {k: xr.DataArray(v, dims=['time', 'var']) for k, v in rts_catchments.items()}
+        results.ts = xr.Dataset(variables).to_array(dim='catchment').to_dataset('var')
 
         return results
     

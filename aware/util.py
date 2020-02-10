@@ -35,7 +35,11 @@ def num2date(ncvar):
         # s = pd.Series(dr)
         s = pd.Series(index=np.floor(time_vals_i).astype(int)) # take floor because relativedelta can only handle integers
         for timediff in s.index:
-            s[timediff] = basedate + dateutil.relativedelta.relativedelta(months=np.asscalar(timediff))
+            if type(timediff) == int:
+                td = timediff
+            else:
+                td = np.asscalar(timediff)
+            s[timediff] = basedate + dateutil.relativedelta.relativedelta(months=td)
 
         s = s.apply(lambda t: (t - pd.datetime(1970, 1, 1)).total_seconds()) # convert to seconds
         s = s.reindex(sorted(list(set(time_vals_i) | set(s.index)))).interpolate(method='linear')
