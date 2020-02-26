@@ -3,7 +3,7 @@
 Authors: Kristian Förster, Florian Hanzer
 
 ## What is AWARE?
-AWARE is a simple deterministic water balance model operating at monthly time steps on a regular grid. It is founded upon the work of McCabe and Markstrom (2007) which combines the Thornthwaite (1948) evapotranspiration formulae and a simple soil water balance model. In addition, AWARE accounts for both snow and ice-melt. The model is written in pure Python and can, thus, easily be integrated in workflows for data analyses. At present, the model is used for seasonal predictions using climate model-based forecasts of anomalies (Förster et al., 2016).
+AWARE is a simple deterministic water balance model operating at monthly time steps on a regular grid. It is founded upon the work of McCabe and Markstrom (2007) which combines the Thornthwaite (1948) evapotranspiration formulae and a simple soil water balance model. In addition, AWARE accounts for both snow and ice-melt. The model is written in pure Python and can, thus, easily be integrated in workflows for data analyses. At present, the model is used for seasonal predictions using climate model-based forecasts of anomalies (Förster et al., 2016, 2018). The model is licensed under GPLv3 (see license file).
 
 ## Prerequisites and installation
 As AWARE is a pure Python implementation, it works on every computer with a Python installation (2.7, 3.5). In order to run properly, AWARE requires the following additional Python packages:
@@ -33,7 +33,7 @@ This features were relevant in developing design criteria in the early stage of 
 ### Meteorological input
 As the model operates on a regular grind, the meteorological forcing must be provided as gridded datasets. At present the model is tested using the [HISTALP](http://www.zamg.ac.at/histalp/index.php) data. This dataset includes monthly values of air temperature and precipitation depth since 1800 for the Greater Alpine Region. In principle it is very easy to provide interface to similar datasets like ERA-Interim or CFSR, respectively.
 
-The concept of meteorological input presumes a reference climatology which is typically applied for model calibration (e.g., HISTALP). Other datasets, such as climate model data, can be used as well. Since these models are typically subjected to a climatology that slightly differs from the reference dataset. The monthly time step allows one to work with standardised anomalies (Wilks, 2006):
+The concept of meteorological input presumes a reference climatology which is typically applied for model calibration (e.g., HISTALP). Other datasets, such as climate model data, can be used as well. Since these models are typically subjected to a climatology that slightly differs from the reference dataset. The monthly time step allows one to work with standardised anomalies (Wilks, 2006, Förster et al., 2018):
 
 ![](./images/eq_anomaly_01.png)
 
@@ -223,6 +223,8 @@ Auer, I., Böhm, R., Jurkovic, A., Lipa, W., Orlik, A., Potzmann, R., Schöner
 Chimani, B., Matulla, C., Böhm, R., and Hofstätter, M.: A new high resolution absolute temperature grid for the Greater Alpine Region back to 1780, *Int. J. Climatol.*, 33, 2129–2141, [doi:10.1002/joc.3574](http://dx.doi.org/10.1002/joc.3574), 2013.
 
 Förster, K., Oesterle, F., Hanzer, F., Schöber, J., Huttenlau, M., and Strasser, U.: A snow and ice melt seasonal prediction modelling system for Alpine reservoirs, *Proc. Int. Assoc. Hydrol. Sci.*, 374, 143–150, [doi:10.5194/piahs-374-143-2016](http://dx.doi.org/10.5194/piahs-374-143-2016), 2016.
+
+Förster, K., Hanzer, F., Stoll, E., Scaife, A. A., MacLachlan, C., Schöber, J., Huttenlau, M., Achleitner, S., and Strasser, U.: Retrospective forecasts of the upcoming winter season snow accumulation in the Inn headwaters (European Alps), *Hydrol. Earth Syst. Sci.*, 22, 1157–1173, [doi:10.5194/hess-22-1157-2018](https://doi.org/10.5194/hess-22-1157-2018), 2018.
 
 Hock, R.: A distributed temperature-index ice- and snowmelt model including potential direct solar radiation, *J. Glaciol.*, 45, 101– 111, 1999.
 
